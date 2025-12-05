@@ -1,7 +1,12 @@
 custom_components/tis/__pycache__/
 custom_components/tis/*.pyc
+custom_components/rs485_tis_gui_tester.py
+custom_components/TIS.py
+TIS_DATABASE_ANALYSIS.json
+TIS_PROTOCOL_DOCUMENTATION.md
 .vscode/
 .idea/
 *.log
 *.bak
+*.db3
 .DS_Store

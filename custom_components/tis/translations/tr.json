@@ -2,20 +2,37 @@
   "config": {
     "step": {
       "user": {
-        "title": "TIS Akıllı Ev Sistemi",
-        "description": "TIS entegrasyonu yüklenecek. Cihazları TIS Addon web arayüzünden ekleyebilirsiniz."
+        "title": "TIS Control Kurulumu",
+        "description": "Kurulum yöntemini seçin:",
+        "menu_options": {
+          "manual": "Manuel Kurulum",
+          "discovery": "Otomatik Keşif (Tüm Cihazları Tara)"
+        }
+      },
+      "manual": {
+        "title": "Manuel Kurulum",
+        "description": "TIS cihazının IP adresi ve cihaz bilgilerini girin",
+        "data": {
+          "host": "IP Adresi",
+          "subnet": "Subnet ID",
+          "device": "Device ID"
+        }
+      },
+      "discovery": {
+        "title": "Cihaz Seçimi",
+        "description": "Bulunan TIS cihazlarından birini seçin:",
+        "data": {
+          "device": "Cihaz"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "Cihaza bağlanılamadı. IP adresi ve ağ bağlantısını kontrol edin.",
+      "unknown": "Beklenmeyen bir hata oluştu"
+    },
     "abort": {
-      "already_configured": "TIS sistemi zaten yapılandırılmış."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "TIS Ayarları",
-        "description": "TIS cihazları TIS Addon web arayüzünden yönetilir. Entity'leri silmek için cihaz sayfasından entity'yi seçip sağ üst köşedeki ayarlar menüsünü kullanın."
-      }
+      "already_configured": "Bu cihaz zaten yapılandırılmış",
+      "no_devices_found": "Ağda hiç TIS cihazı bulunamadı. Lütfen cihazların açık ve aynı ağda olduğundan emin olun."
     }
   }
 }
