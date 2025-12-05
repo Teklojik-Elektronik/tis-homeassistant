@@ -10,6 +10,7 @@ import socket
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 from .tis_protocol import TISPacket
@@ -208,6 +209,72 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     
     return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Remove a config entry from a device (Red Delete button support)."""
+    # Get device identifier
+    identifiers = list(device_entry.identifiers)
+    if not identifiers:
+        return True
+    
+    domain, unique_id = identifiers[0]
+    if domain != DOMAIN:
+        return True
+    
+    try:
+        # Parse unique_id format: "tis_1_10" -> subnet 1, device 10
+        parts = unique_id.split('_')
+        if len(parts) >= 3:
+            subnet = int(parts[1])
+            device_id = int(parts[2])
+            
+            _LOGGER.info(f"Removing TIS device: {unique_id} (Subnet {subnet}, Device {device_id})")
+            
+            # Remove from TIS Addon devices file
+            devices_file = "/config/tis_devices.json"
+            if os.path.exists(devices_file):
+                try:
+                    with open(devices_file, 'r') as f:
+                        devices = json.load(f)
+                    
+                    device_key = f"{subnet}.{device_id}"
+                    if device_key in devices:
+                        del devices[device_key]
+                        with open(devices_file, 'w') as f:
+                            json.dump(devices, f, indent=2)
+                        _LOGGER.info(f"Removed {device_key} from devices file")
+                except Exception as e:
+                    _LOGGER.error(f"Failed to update devices file: {e}")
+            
+            # Clean up all callbacks for this device
+            entry_data = hass.data[DOMAIN].get(config_entry.entry_id, {})
+            if "update_callbacks" in entry_data:
+                keys_to_remove = [
+                    k for k in entry_data["update_callbacks"].keys()
+                    if k[0] == subnet and k[1] == device_id
+                ]
+                for key in keys_to_remove:
+                    entry_data["update_callbacks"].pop(key, None)
+            
+            if "name_callbacks" in entry_data:
+                keys_to_remove = [
+                    k for k in entry_data["name_callbacks"].keys()
+                    if k[0] == subnet and k[1] == device_id
+                ]
+                for key in keys_to_remove:
+                    entry_data["name_callbacks"].pop(key, None)
+            
+            _LOGGER.info(f"Device {device_key} and all its channels removed successfully")
+            return True
+    
+    except Exception as e:
+        _LOGGER.error(f"Error removing device: {e}")
+        return False
+    
+    return True
 
 
 async def async_remove_config_entry_device(

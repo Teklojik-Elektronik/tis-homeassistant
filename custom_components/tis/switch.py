@@ -94,11 +94,14 @@ class TISSwitch(SwitchEntity):
             self._attr_unique_id = unique_id
             self._name = device_name
         
+        # Device info - all channels share same device identifier
+        # This groups all CH1, CH2, etc. under one device
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, unique_id)},
+            "identifiers": {(DOMAIN, unique_id)},  # Same for all channels
             "name": device_name,
             "manufacturer": "TIS",
             "model": model_name,
+            "suggested_area": "Living Room",
         }
         
     async def async_added_to_hass(self) -> None:
