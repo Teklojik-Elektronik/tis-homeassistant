@@ -27,6 +27,7 @@ class TISDataUpdateCoordinator(DataUpdateCoordinator):
             entry.data.get(CONF_DEVICE, 1),
         )
         self.entry = entry
+        self.hass = hass
 
         super().__init__(
             hass,
@@ -43,11 +44,41 @@ class TISDataUpdateCoordinator(DataUpdateCoordinator):
 
             status = await self.device.async_get_status()
             sensors = await self.device.async_get_sensors()
+            
+            # Get radar and LUX data from integration's UDP listener storage
+            subnet = self.entry.data.get(CONF_SUBNET, 1)
+            device_id = self.entry.data.get(CONF_DEVICE, 1)
+            device_key = (subnet, device_id)
+            
+            radar_motion = None
+            lux = None
+            model = "TIS Control Device"
+            
+            # Check if integration data exists (for radar/LUX sensors)
+            if DOMAIN in self.hass.data and self.entry.entry_id in self.hass.data[DOMAIN]:
+                entry_data = self.hass.data[DOMAIN][self.entry.entry_id]
+                
+                # Get radar motion data
+                if device_key in entry_data.get("radar_data", {}):
+                    radar_motion = entry_data["radar_data"][device_key]
+                    model = "TIS-OS-MMV2-IRE"  # Radar sensor model
+                
+                # Get LUX data
+                if device_key in entry_data.get("lux_data", {}):
+                    lux_data = entry_data["lux_data"][device_key]
+                    lux = {
+                        "value": lux_data.get("lux", 0),
+                        "threshold_low": lux_data.get("threshold_low", 0),
+                        "threshold_high": lux_data.get("threshold_high", 0),
+                    }
 
             return {
                 "status": status,
                 "sensors": sensors,
                 "host": self.device.host,
+                "radar_motion": radar_motion,
+                "lux": lux,
+                "model": model,
             }
         except Exception as err:
             _LOGGER.error("Error updating TIS device data: %s", err)

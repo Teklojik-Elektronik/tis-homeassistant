@@ -13,11 +13,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
-from .tis_protocol import TISPacket
+from .tis_protocol import (
+    TISPacket,
+    parse_radar_motion_packet,
+    parse_environment_status_packet,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SWITCH, Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -45,6 +49,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "gateway_ip": entry.data.get("gateway_ip", "192.168.1.200"),
         "udp_port": entry.data.get("udp_port", 6000),
         "update_callbacks": {},  # {(subnet, device, channel): callback_func}
+        "radar_callbacks": {},  # {(subnet, device): callback_func} for radar sensors
+        "lux_callbacks": {},  # {(subnet, device): callback_func} for LUX sensors
+        "radar_data": {},  # {(subnet, device): radar_motion_data}
+        "lux_data": {},  # {(subnet, device): lux_data}
         "listener_task": None,
     }
     
@@ -135,6 +143,36 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                                 if callback_key in entry_data["update_callbacks"]:
                                     callback = entry_data["update_callbacks"][callback_key]
                                     await callback(is_on, brightness)
+                    
+                    # Handle radar motion detection (OpCode 0x2025, 62 bytes)
+                    elif parsed['op_code'] == 0x2025 and len(tis_data) == 62:
+                        radar_data = parse_radar_motion_packet(tis_data)
+                        if radar_data:
+                            _LOGGER.debug(f"Radar motion from {src_subnet}.{src_device}: {radar_data['state']}, targets={radar_data['target_count']}")
+                            
+                            # Store radar data
+                            device_key = (src_subnet, src_device)
+                            entry_data["radar_data"][device_key] = radar_data
+                            
+                            # Call registered callback
+                            if device_key in entry_data["radar_callbacks"]:
+                                callback = entry_data["radar_callbacks"][device_key]
+                                await callback(radar_data)
+                    
+                    # Handle environment status / LUX sensor (OpCode 0x2025, 37 bytes)
+                    elif parsed['op_code'] == 0x2025 and len(tis_data) == 37:
+                        lux_data = parse_environment_status_packet(tis_data)
+                        if lux_data:
+                            _LOGGER.debug(f"LUX sensor from {src_subnet}.{src_device}: {lux_data['lux']} lx")
+                            
+                            # Store LUX data
+                            device_key = (src_subnet, src_device)
+                            entry_data["lux_data"][device_key] = lux_data
+                            
+                            # Call registered callback
+                            if device_key in entry_data["lux_callbacks"]:
+                                callback = entry_data["lux_callbacks"][device_key]
+                                await callback(lux_data)
                     
                     # Handle channel name response (OpCode 0xF00F)
                     elif parsed['op_code'] == 0xF00F:
