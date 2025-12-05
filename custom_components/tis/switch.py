@@ -36,9 +36,15 @@ async def async_setup_entry(
         model_name = device_data.get("model_name", "TIS Device")
         channels = device_data.get("channels", 1)
         device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
+        channel_names = device_data.get("channel_names", {})  # Get channel names from JSON
+        
+        _LOGGER.debug(f"Device {unique_id} has {len(channel_names)} channel names in JSON")
         
         # Create switch entity for each channel
         for channel in range(1, channels + 1):  # Channels start from 1
+            # Get pre-defined channel name from JSON (if available)
+            predefined_name = channel_names.get(str(channel))
+            
             entities.append(
                 TISSwitch(
                     hass,
@@ -50,7 +56,8 @@ async def async_setup_entry(
                     device_id,
                     channel,
                     gateway_ip,
-                    udp_port
+                    udp_port,
+                    predefined_name  # Pass channel name from JSON
                 )
             )
     
@@ -72,7 +79,8 @@ class TISSwitch(SwitchEntity):
         device_id: int,
         channel: int,
         gateway_ip: str,
-        udp_port: int
+        udp_port: int,
+        predefined_name: str = None
     ) -> None:
         """Initialize the switch."""
         self.hass = hass
@@ -84,13 +92,18 @@ class TISSwitch(SwitchEntity):
         self._udp_port = udp_port
         self._is_on = False
         self._brightness = 0
-        self._channel_name = None  # Will be populated from OpCode 0xF00F
+        self._channel_name = predefined_name  # Use predefined name from JSON
         self._device_name = device_name
         
         # Entity attributes
         if channel > 0:
             self._attr_unique_id = f"{unique_id}_ch{channel}"
-            self._name = f"{device_name} CH{channel}"  # Will be updated by channel name
+            # Use predefined name if available, otherwise CH number
+            if predefined_name:
+                self._name = f"{device_name} {predefined_name}"
+                _LOGGER.info(f"Created entity with predefined name: {self._name}")
+            else:
+                self._name = f"{device_name} CH{channel}"  # Will be updated by UDP response
         else:
             self._attr_unique_id = unique_id
             self._name = device_name
