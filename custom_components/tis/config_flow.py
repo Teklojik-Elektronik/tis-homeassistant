@@ -33,18 +33,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle initial step - create entry and redirect to web UI."""
-        if user_input is not None or self._async_current_entries():
-            # Already configured or user confirmed
-            return self.async_abort(reason="already_configured")
+        """Handle initial step - get gateway IP and port."""
+        errors = {}
         
-        # Create a single entry for TIS system (no per-device config)
-        return self.async_create_entry(
-            title="TIS Akıllı Ev Sistemi",
-            data={
-                "configured": True,
-                "web_ui_port": 8888,
-            },
+        if user_input is not None:
+            # Validate and create entry
+            return self.async_create_entry(
+                title="TIS Akıllı Ev Sistemi",
+                data={
+                    "gateway_ip": user_input["gateway_ip"],
+                    "udp_port": user_input.get("udp_port", 6000),
+                    "configured": True,
+                },
+            )
+        
+        # Show form to get gateway IP and port
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required("gateway_ip", default="192.168.1.200"): str,
+                vol.Optional("udp_port", default=6000): int,
+            }),
+            errors=errors,
         )
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
@@ -62,15 +72,31 @@ class TISOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options - mainly for UI purposes."""
+        """Manage the options - allow changing gateway IP and port."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
+            # Update config entry data
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={
+                    **self.config_entry.data,
+                    "gateway_ip": user_input["gateway_ip"],
+                    "udp_port": user_input.get("udp_port", 6000),
+                }
+            )
+            return self.async_create_entry(title="", data={})
+        
+        # Show form with current values
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema({}),
-            description_placeholders={
-                "info": "TIS cihazları TIS Addon web arayüzünden yönetilir. Entity'leri silmek için cihaz sayfasından entity'yi seçip sağ üst köşedeki ayarlar menüsünü kullanın."
-            }
+            data_schema=vol.Schema({
+                vol.Required(
+                    "gateway_ip", 
+                    default=self.config_entry.data.get("gateway_ip", "192.168.1.200")
+                ): str,
+                vol.Optional(
+                    "udp_port", 
+                    default=self.config_entry.data.get("udp_port", 6000)
+                ): int,
+            }),
         )
 

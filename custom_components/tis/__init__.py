@@ -39,6 +39,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store devices in integration data
     hass.data[DOMAIN][entry.entry_id] = {
         "devices": devices,
+        "gateway_ip": entry.data.get("gateway_ip", "192.168.1.200"),
+        "udp_port": entry.data.get("udp_port", 6000),
         "configured": True,
     }
     
