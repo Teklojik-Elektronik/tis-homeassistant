@@ -9,5 +9,18 @@
     "abort": {
       "already_configured": "TIS sistemi zaten yapılandırılmış.\n\nWeb Arayüzü: http://homeassistant.local:8888\nveya yan menüden 'TIS Dashboard' bağlantısını kullanın."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TIS Ayarları",
+        "description": "TIS cihazları TIS Addon web arayüzünden yönetilir.\n\nEntity'leri silmek için:\n1. Cihaz sayfasını açın\n2. Silmek istediğiniz entity'yi seçin\n3. Sağ üst köşedeki ⚙️ simgesine tıklayın\n4. 'Entity'yi Sil' seçeneğini kullanın"
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "name": "Kanal {channel}"
+    }
   }
 }

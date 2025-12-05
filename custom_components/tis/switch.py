@@ -84,14 +84,15 @@ class TISSwitch(SwitchEntity):
         self._is_on = False
         self._brightness = 0
         self._channel_name = None  # Will be populated from OpCode 0xF00F
+        self._device_name = device_name
         
         # Entity attributes
         if channel > 0:
             self._attr_unique_id = f"{unique_id}_ch{channel}"
-            self._attr_name = f"{device_name} CH{channel}"
+            self._name = f"{device_name} CH{channel}"  # Will be updated by channel name
         else:
             self._attr_unique_id = unique_id
-            self._attr_name = device_name
+            self._name = device_name
         
         self._attr_device_info = {
             "identifiers": {(DOMAIN, unique_id)},
@@ -179,7 +180,7 @@ class TISSwitch(SwitchEntity):
         self._is_on = is_on
         self._brightness = brightness
         self.async_write_ha_state()
-        _LOGGER.debug(f"Updated {self._attr_name}: is_on={is_on}, brightness={brightness}%")
+        _LOGGER.debug(f"Updated {self.name}: is_on={is_on}, brightness={brightness}%")
     
     async def _handle_channel_name(self, name: str):
         """Handle channel name from UDP listener."""
@@ -187,16 +188,18 @@ class TISSwitch(SwitchEntity):
         
         # Update entity name if channel name is not "Bilinmiyor" (Unknown)
         if name and name != "Bilinmiyor":
-            device_base = self._attr_name.split(' CH')[0] if ' CH' in self._attr_name else self._attr_name
-            self._attr_name = f"{device_base} {name}"
-            _LOGGER.info(f"Updated entity name to: {self._attr_name}")
+            self._name = f"{self._device_name} {name}"
+            _LOGGER.info(f"Updated entity name to: {self._name}")
+        else:
+            # Keep CH number for unknown channels
+            _LOGGER.debug(f"Channel {self._channel} name is '{name}', keeping CH{self._channel}")
         
         self.async_write_ha_state()
 
     @property
     def name(self) -> str:
-        """Return the name of the switch."""
-        return self._attr_name
+        """Return the name of the switch (dynamically updated)."""
+        return self._name
     
     @property
     def is_on(self) -> bool:
