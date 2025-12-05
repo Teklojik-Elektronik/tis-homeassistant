@@ -5,6 +5,7 @@ import asyncio
 import logging
 import json
 import os
+import socket
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,6 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
+from .tis_protocol import TISPacket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,10 +66,93 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "udp_port": entry.data.get("udp_port", 6000),
         "configured": True,
         "file_watcher_task": None,
+        "udp_listener_task": None,
+        "update_callbacks": {},  # {(subnet, device, channel): callback_func}
     }
     
     # Forward to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    # Start UDP listener for real-time state updates
+    async def udp_listener():
+        """Listen for TIS UDP packets and update entity states."""
+        entry_data = hass.data[DOMAIN][entry.entry_id]
+        udp_port = entry_data["udp_port"]
+        
+        _LOGGER.info(f"Starting TIS UDP listener on port {udp_port}")
+        
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(('', udp_port))
+        sock.setblocking(False)
+        
+        try:
+            while True:
+                try:
+                    # Non-blocking receive with asyncio
+                    data, addr = await hass.loop.sock_recvfrom(sock, 1024)
+                    
+                    # Parse packet (skip SMARTCLOUD header if present)
+                    if b'SMARTCLOUD' in data:
+                        smartcloud_index = data.find(b'SMARTCLOUD')
+                        tis_data = data[smartcloud_index + 10:]
+                    else:
+                        tis_data = data
+                    
+                    parsed = TISPacket.parse(tis_data)
+                    
+                    if parsed:
+                        src_subnet = parsed['src_subnet']
+                        src_device = parsed['src_device']
+                        
+                        # Handle feedback packet (OpCode 0x0032)
+                        if parsed['op_code'] == 0x0032:
+                            if len(parsed['additional_data']) >= 3:
+                                channel = parsed['additional_data'][0]
+                                brightness_raw = parsed['additional_data'][2]
+                                
+                                # TIS uses 0-248 scale for 0-100%
+                                brightness = int((brightness_raw / 248.0) * 100)
+                                is_on = brightness_raw > 0
+                                
+                                _LOGGER.debug(f"Feedback from {src_subnet}.{src_device} CH{channel}: "
+                                            f"raw={brightness_raw}, pct={brightness}%, state={'ON' if is_on else 'OFF'}")
+                                
+                                # Find callback and update entity
+                                callback_key = (src_subnet, src_device, channel)
+                                if callback_key in entry_data["update_callbacks"]:
+                                    callback = entry_data["update_callbacks"][callback_key]
+                                    await callback(is_on, brightness)
+                        
+                        # Handle multi-channel status (OpCode 0x0034)
+                        elif parsed['op_code'] == 0x0034:
+                            if len(parsed['additional_data']) >= 24:
+                                _LOGGER.debug(f"Multi-channel status from {src_subnet}.{src_device}")
+                                
+                                for channel in range(1, 25):  # Channels 1-24
+                                    brightness_raw = parsed['additional_data'][channel - 1]
+                                    brightness = int((brightness_raw / 248.0) * 100)
+                                    is_on = brightness_raw > 0
+                                    
+                                    callback_key = (src_subnet, src_device, channel)
+                                    if callback_key in entry_data["update_callbacks"]:
+                                        callback = entry_data["update_callbacks"][callback_key]
+                                        await callback(is_on, brightness)
+                
+                except BlockingIOError:
+                    await asyncio.sleep(0.1)
+                except Exception as e:
+                    _LOGGER.error(f"Error processing UDP packet: {e}", exc_info=True)
+                    await asyncio.sleep(0.1)
+                    
+        except asyncio.CancelledError:
+            _LOGGER.info("TIS UDP listener stopped")
+        finally:
+            sock.close()
+    
+    # Start UDP listener task
+    udp_task = hass.loop.create_task(udp_listener())
+    hass.data[DOMAIN][entry.entry_id]["udp_listener_task"] = udp_task
     
     # Start file watcher to detect changes in tis_devices.json
     async def watch_devices_file():
@@ -95,15 +180,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     watcher_task = hass.loop.create_task(watch_devices_file())
     hass.data[DOMAIN][entry.entry_id]["file_watcher_task"] = watcher_task
     
-    _LOGGER.info(f"TIS Integration loaded with {len(devices)} devices, file watcher started")
+    _LOGGER.info(f"TIS Integration loaded: {len(devices)} devices, UDP listener on port {entry.data.get('udp_port', 6000)}")
     
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Stop file watcher
     entry_data = hass.data[DOMAIN].get(entry.entry_id)
+    
+    # Stop UDP listener
+    if entry_data and entry_data.get("udp_listener_task"):
+        udp_task = entry_data["udp_listener_task"]
+        udp_task.cancel()
+        try:
+            await udp_task
+        except asyncio.CancelledError:
+            pass
+    
+    # Stop file watcher
     if entry_data and entry_data.get("file_watcher_task"):
         watcher_task = entry_data["file_watcher_task"]
         watcher_task.cancel()
@@ -118,6 +213,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         _LOGGER.info("TIS Integration unloaded successfully")
+    
+    return unload_ok
     
     return unload_ok
 
