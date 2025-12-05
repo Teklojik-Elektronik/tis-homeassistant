@@ -46,6 +46,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store devices and callbacks in integration data
     hass.data[DOMAIN][entry.entry_id] = {
         "devices": devices,
+        "devices_file": devices_file,
         "gateway_ip": entry.data.get("gateway_ip", "192.168.1.200"),
         "udp_port": entry.data.get("udp_port", 6000),
         "update_callbacks": {},  # {(subnet, device, channel): callback_func}
@@ -54,6 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "radar_data": {},  # {(subnet, device): radar_motion_data}
         "lux_data": {},  # {(subnet, device): lux_data}
         "listener_task": None,
+        "file_watcher_task": None,
     }
     
     # Forward to platforms
@@ -62,6 +64,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Start UDP listener
     listener_task = hass.loop.create_task(_udp_listener(hass, entry))
     hass.data[DOMAIN][entry.entry_id]["listener_task"] = listener_task
+    
+    # Start file watcher to detect when devices are added via web UI
+    file_watcher_task = hass.loop.create_task(_watch_devices_file(hass, entry))
+    hass.data[DOMAIN][entry.entry_id]["file_watcher_task"] = file_watcher_task
     
     _LOGGER.info(f"TIS Integration loaded with {len(devices)} devices, UDP listener started")
     
@@ -79,6 +85,106 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('', udp_port))
     sock.setblocking(False)
+
+
+async def _create_radar_entities_if_needed(hass: HomeAssistant, entry: ConfigEntry, subnet: int, device_id: int):
+    \"\"\"Create radar sensor entities dynamically when device is detected.\"\"\"
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    device_key = (subnet, device_id)
+    
+    # Check if binary sensor entities already created
+    if \"binary_sensor_add_entities\" in entry_data:
+        created = entry_data.get(\"binary_sensor_created_devices\", set())
+        if device_key not in created:
+            # Import here to avoid circular dependency
+            from .binary_sensor import TISRadarMotionSensor
+            
+            entities = [TISRadarMotionSensor(hass, entry, subnet, device_id)]
+            entry_data[\"binary_sensor_add_entities\"](entities)
+            created.add(device_key)
+            _LOGGER.info(f\"✅ Created binary sensor entities for TIS Radar {subnet}.{device_id}\")
+    
+    # Check if sensor entities already created
+    if \"sensor_add_entities\" in entry_data:
+        created = entry_data.get(\"sensor_created_devices\", set())
+        if device_key not in created:
+            # Import here to avoid circular dependency
+            from .sensor import (
+                TISMotionDistanceSensor,
+                TISStationaryDistanceSensor,
+                TISTargetCountSensor,
+                TISMotionStateSensor,
+                TISLuxSensor,
+            )
+            
+            entities = [
+                TISMotionDistanceSensor(hass, entry, subnet, device_id),
+                TISStationaryDistanceSensor(hass, entry, subnet, device_id),
+                TISTargetCountSensor(hass, entry, subnet, device_id),
+                TISMotionStateSensor(hass, entry, subnet, device_id),
+                TISLuxSensor(hass, entry, subnet, device_id),
+            ]
+            entry_data[\"sensor_add_entities\"](entities)
+            created.add(device_key)
+            _LOGGER.info(f\"✅ Created sensor entities for TIS Radar {subnet}.{device_id}\")
+
+
+async def _watch_devices_file(hass: HomeAssistant, entry: ConfigEntry):
+    \"\"\"Watch tis_devices.json for changes and reload devices list.\"\"\"
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    devices_file = entry_data[\"devices_file\"]
+    last_mtime = 0
+    
+    try:
+        while True:
+            await asyncio.sleep(5)  # Check every 5 seconds
+            
+            try:
+                if os.path.exists(devices_file):
+                    current_mtime = os.path.getmtime(devices_file)
+                    
+                    if current_mtime != last_mtime:
+                        last_mtime = current_mtime
+                        
+                        # Reload devices
+                        with open(devices_file, 'r') as f:
+                            new_devices = json.load(f)
+                        
+                        old_devices = entry_data[\"devices\"]
+                        
+                        # Find newly added devices
+                        new_device_keys = set(new_devices.keys()) - set(old_devices.keys())
+                        
+                        if new_device_keys:
+                            _LOGGER.info(f\"🔄 Detected {len(new_device_keys)} new devices in Web UI: {new_device_keys}\")
+                            
+                            # Update devices dict
+                            entry_data[\"devices\"] = new_devices
+                            
+                            # For each new radar device, if we already have data, create entities
+                            for device_str in new_device_keys:
+                                try:
+                                    parts = device_str.split('.')
+                                    if len(parts) == 2:
+                                        subnet = int(parts[0])
+                                        device_id = int(parts[1])
+                                        device_key = (subnet, device_id)
+                                        
+                                        # Check if we have radar data for this device
+                                        if device_key in entry_data.get(\"radar_data\", {}) or device_key in entry_data.get(\"lux_data\", {}):
+                                            await _create_radar_entities_if_needed(hass, entry, subnet, device_id)
+                                        else:
+                                            _LOGGER.info(f\"⏳ Device {device_str} added to config, waiting for radar packets...\")
+                                except Exception as e:
+                                    _LOGGER.error(f\"Error processing new device {device_str}: {e}\")
+            
+            except Exception as e:
+                _LOGGER.error(f\"Error watching devices file: {e}\")
+    
+    except asyncio.CancelledError:
+        _LOGGER.info(\"TIS devices file watcher stopped\")
+    except Exception as e:
+        _LOGGER.error(f\"Fatal error in devices file watcher: {e}\")
     
     try:
         while True:
@@ -154,6 +260,14 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                             device_key = (src_subnet, src_device)
                             entry_data["radar_data"][device_key] = radar_data
                             
+                            # Check if device is in tis_devices.json (added via web UI)
+                            devices = entry_data.get("devices", {})
+                            device_str = f"{src_subnet}.{src_device}"
+                            
+                            if device_str in devices:
+                                # Device exists in web UI config - create entities if not already created
+                                await _create_radar_entities_if_needed(hass, entry, src_subnet, src_device)
+                            
                             # Call registered callback
                             if device_key in entry_data["radar_callbacks"]:
                                 callback = entry_data["radar_callbacks"][device_key]
@@ -168,6 +282,14 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                             # Store LUX data
                             device_key = (src_subnet, src_device)
                             entry_data["lux_data"][device_key] = lux_data
+                            
+                            # Check if device is in tis_devices.json (added via web UI)
+                            devices = entry_data.get("devices", {})
+                            device_str = f"{src_subnet}.{src_device}"
+                            
+                            if device_str in devices:
+                                # Device exists in web UI config - create entities if not already created
+                                await _create_radar_entities_if_needed(hass, entry, src_subnet, src_device)
                             
                             # Call registered callback
                             if device_key in entry_data["lux_callbacks"]:
@@ -235,15 +357,26 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Stop UDP listener
     entry_data = hass.data[DOMAIN].get(entry.entry_id)
-    if entry_data and entry_data.get("listener_task"):
-        listener_task = entry_data["listener_task"]
-        listener_task.cancel()
-        try:
-            await listener_task
-        except asyncio.CancelledError:
-            pass
+    
+    if entry_data:
+        # Stop UDP listener
+        if entry_data.get("listener_task"):
+            listener_task = entry_data["listener_task"]
+            listener_task.cancel()
+            try:
+                await listener_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Stop file watcher
+        if entry_data.get("file_watcher_task"):
+            file_watcher_task = entry_data["file_watcher_task"]
+            file_watcher_task.cancel()
+            try:
+                await file_watcher_task
+            except asyncio.CancelledError:
+                pass
     
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

@@ -1,6 +1,8 @@
 """Support for TIS binary sensors (motion detection)."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -13,6 +15,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import TISDataUpdateCoordinator
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -20,20 +24,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TIS binary sensors based on a config entry."""
-    from .const import CONF_SUBNET, CONF_DEVICE
+    # Store the add_entities callback for dynamic entity creation
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    entry_data["binary_sensor_add_entities"] = async_add_entities
+    entry_data["binary_sensor_created_devices"] = set()  # Track created devices
     
-    # Check if this is a radar sensor device
-    # For now, we'll create entities for all devices and let them show as unavailable if no data
-    subnet = entry.data.get(CONF_SUBNET, 1)
-    device_id = entry.data.get(CONF_DEVICE, 1)
-    
-    entities = []
-    
-    # Add radar motion sensor entity
-    # It will show as unavailable until radar packets are received
-    entities.append(TISRadarMotionSensor(hass, entry, subnet, device_id))
-
-    async_add_entities(entities)
+    _LOGGER.info("TIS Binary Sensor platform ready for dynamic entity creation")
 
 
 class TISRadarMotionSensor(BinarySensorEntity):

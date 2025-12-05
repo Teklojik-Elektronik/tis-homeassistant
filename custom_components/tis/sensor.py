@@ -1,6 +1,8 @@
 """Support for TIS sensors."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -20,6 +22,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import TISDataUpdateCoordinator
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -27,25 +31,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TIS sensors based on a config entry."""
-    from .const import CONF_SUBNET, CONF_DEVICE
+    # Store the add_entities callback for dynamic entity creation
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    entry_data["sensor_add_entities"] = async_add_entities
+    entry_data["sensor_created_devices"] = set()  # Track created devices
     
-    subnet = entry.data.get(CONF_SUBNET, 1)
-    device_id = entry.data.get(CONF_DEVICE, 1)
-
-    # Add sensors based on available data
-    entities = []
-    
-    # Add radar motion sensor entities
-    # They will show as unavailable until radar packets are received
-    entities.append(TISMotionDistanceSensor(hass, entry, subnet, device_id))
-    entities.append(TISStationaryDistanceSensor(hass, entry, subnet, device_id))
-    entities.append(TISTargetCountSensor(hass, entry, subnet, device_id))
-    entities.append(TISMotionStateSensor(hass, entry, subnet, device_id))
-    
-    # Add LUX sensor
-    entities.append(TISLuxSensor(hass, entry, subnet, device_id))
-
-    async_add_entities(entities)
+    _LOGGER.info("TIS Sensor platform ready for dynamic entity creation")
 
 
 class TISTemperatureSensor(CoordinatorEntity[TISDataUpdateCoordinator], SensorEntity):
