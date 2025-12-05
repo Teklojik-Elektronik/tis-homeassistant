@@ -7,14 +7,10 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN, CONF_SUBNET, CONF_DEVICE
-from .api import TISDevice
-from .discovery import discover_tis_devices
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
