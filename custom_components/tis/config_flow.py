@@ -38,17 +38,28 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle initial step - create entry and redirect to web UI."""
-        if user_input is not None or self._async_current_entries():
-            # Already configured or user confirmed
+        # Check if already configured
+        if self._async_current_entries():
             return self.async_abort(reason="already_configured")
         
-        # Create a single entry for TIS system (no per-device config)
-        return self.async_create_entry(
-            title="TIS Akıllı Ev Sistemi",
-            data={
-                "configured": True,
-                "web_ui_port": 8888,
-            },
+        if user_input is not None:
+            # User confirmed, create entry
+            return self.async_create_entry(
+                title="TIS Akıllı Ev Sistemi",
+                data={
+                    "configured": True,
+                    "gateway_ip": "192.168.1.200",
+                    "udp_port": 6000,
+                },
+            )
+        
+        # Show confirmation form
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "info": "TIS Akıllı Ev Sistemi entegrasyonu yüklenecek. Cihazları TIS Addon web arayüzünden ekleyebilirsiniz."
+            }
         )
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
