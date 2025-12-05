@@ -105,6 +105,39 @@ class TISSwitch(SwitchEntity):
         callback_key = (self._subnet, self._device_id, self._channel)
         entry_data["update_callbacks"][callback_key] = self._handle_feedback
         _LOGGER.debug(f"Registered callback for {self._subnet}.{self._device_id} CH{self._channel}")
+        
+        # Request initial state from device
+        await self._request_state()
+    
+    async def _request_state(self) -> None:
+        """Request current state from device (OpCode 0xEFFF)."""
+        try:
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect(bind=False)
+            
+            packet = TISPacket()
+            packet.src_subnet = 1
+            packet.src_device = 254
+            packet.src_type = 0xFFFE
+            packet.tgt_subnet = self._subnet
+            packet.tgt_device = self._device_id
+            packet.op_code = 0xEFFF  # Device status query
+            packet.additional_data = bytes([self._channel])
+            
+            tis_data = packet.build()
+            
+            # Add SMARTCLOUD header
+            from .discovery import get_local_ip
+            local_ip = get_local_ip()
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+            
+            client.send_to(full_packet, self._gateway_ip)
+            client.close()
+            
+            _LOGGER.debug(f"Requested state from {self._subnet}.{self._device_id} CH{self._channel}")
+        except Exception as e:
+            _LOGGER.error(f"Failed to request state: {e}")
     
     async def _handle_feedback(self, is_on: bool, brightness: int):
         """Handle feedback from UDP listener."""

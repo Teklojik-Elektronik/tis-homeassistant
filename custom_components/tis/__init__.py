@@ -93,10 +93,13 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                         src_subnet = parsed['src_subnet']
                         src_device = parsed['src_device']
                         
-                        # Parse feedback data: [channel, brightness]
-                        if len(parsed['additional_data']) >= 2:
+                        # Parse feedback data: [channel, 0xF8, actual_brightness, ...]
+                        # Index 0: Channel
+                        # Index 1: Always 0xF8 (max brightness constant)
+                        # Index 2: Actual brightness (0-248)
+                        if len(parsed['additional_data']) >= 3:
                             channel = parsed['additional_data'][0]
-                            brightness_raw = parsed['additional_data'][1]
+                            brightness_raw = parsed['additional_data'][2]  # 3rd byte!
                             
                             # TIS uses 0-248 scale for 0-100%
                             brightness = int((brightness_raw / 248.0) * 100)
