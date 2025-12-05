@@ -189,13 +189,14 @@ class TISSwitch(SwitchEntity):
         """Handle channel name from UDP listener."""
         self._channel_name = name
         
-        # Update entity name if channel name is not "Bilinmiyor" (Unknown)
-        if name and name != "Bilinmiyor":
+        # Update entity name if channel name is valid
+        if name:  # Not None and not empty
             self._name = f"{self._device_name} {name}"
             _LOGGER.info(f"Updated entity name to: {self._name}")
         else:
-            # Keep CH number for unknown channels
-            _LOGGER.debug(f"Channel {self._channel} name is '{name}', keeping CH{self._channel}")
+            # Keep CH number for undefined channels (0xFF response)
+            self._name = f"{self._device_name} CH{self._channel}"
+            _LOGGER.debug(f"Channel {self._channel} name is undefined, using CH{self._channel}")
         
         self.async_write_ha_state()
 

@@ -145,11 +145,16 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                             # Decode UTF-8 channel name (handle Turkish characters)
                             try:
                                 name_bytes = bytes(parsed['additional_data'][1:])
-                                # Remove null terminators
-                                name_bytes = name_bytes.rstrip(b'\x00')
-                                channel_name = name_bytes.decode('utf-8')
+                                # Remove null terminators and 0xFF (undefined channel name marker)
+                                name_bytes = name_bytes.rstrip(b'\x00').rstrip(b'\xff')
                                 
-                                _LOGGER.info(f"Channel name from {src_subnet}.{src_device} CH{channel}: '{channel_name}'")
+                                # Check if name is empty or all 0xFF (undefined)
+                                if len(name_bytes) == 0 or all(b == 0xFF for b in name_bytes):
+                                    channel_name = None  # Will use CH number
+                                    _LOGGER.debug(f"Channel name from {src_subnet}.{src_device} CH{channel}: undefined (0xFF)")
+                                else:
+                                    channel_name = name_bytes.decode('utf-8').strip()
+                                    _LOGGER.info(f"Channel name from {src_subnet}.{src_device} CH{channel}: '{channel_name}'")
                                 
                                 # Update entity if registered
                                 callback_key = (src_subnet, src_device, channel)
