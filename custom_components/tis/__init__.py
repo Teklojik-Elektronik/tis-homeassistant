@@ -88,11 +88,11 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                 parsed = TISPacket.parse(tis_data)
                 
                 if parsed:
+                    src_subnet = parsed['src_subnet']
+                    src_device = parsed['src_device']
+                    
                     # Check if it's a feedback packet (OpCode 0x0032)
                     if parsed['op_code'] == 0x0032:
-                        src_subnet = parsed['src_subnet']
-                        src_device = parsed['src_device']
-                        
                         # Parse feedback data: [channel, 0xF8, actual_brightness, ...]
                         # Index 0: Channel
                         # Index 1: Always 0xF8 (max brightness constant)
@@ -116,6 +116,47 @@ async def _udp_listener(hass: HomeAssistant, entry: ConfigEntry):
                                 await callback(is_on, brightness)
                             else:
                                 _LOGGER.warning(f"No callback registered for {callback_key}")
+                    
+                    # Handle multi-channel status response (OpCode 0x0034)
+                    elif parsed['op_code'] == 0x0034:
+                        # Response to 0x0033 query: 24 bytes, one per channel
+                        # Each byte = brightness (0-248)
+                        if len(parsed['additional_data']) >= 24:
+                            _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device}")
+                            
+                            for channel in range(24):
+                                brightness_raw = parsed['additional_data'][channel]
+                                brightness = int((brightness_raw / 248.0) * 100)
+                                is_on = brightness_raw > 0
+                                
+                                # Update entity if registered
+                                callback_key = (src_subnet, src_device, channel)
+                                if callback_key in entry_data["update_callbacks"]:
+                                    callback = entry_data["update_callbacks"][callback_key]
+                                    await callback(is_on, brightness)
+                    
+                    # Handle channel name response (OpCode 0xF00F)
+                    elif parsed['op_code'] == 0xF00F:
+                        # Response to 0xF00E query: [channel, ...UTF-8 name bytes...]
+                        if len(parsed['additional_data']) >= 1:
+                            channel = parsed['additional_data'][0]
+                            
+                            # Decode UTF-8 channel name (handle Turkish characters)
+                            try:
+                                name_bytes = bytes(parsed['additional_data'][1:])
+                                # Remove null terminators
+                                name_bytes = name_bytes.rstrip(b'\x00')
+                                channel_name = name_bytes.decode('utf-8')
+                                
+                                _LOGGER.info(f"Channel name from {src_subnet}.{src_device} CH{channel}: '{channel_name}'")
+                                
+                                # Update entity if registered
+                                callback_key = (src_subnet, src_device, channel)
+                                if callback_key in entry_data.get("name_callbacks", {}):
+                                    callback = entry_data["name_callbacks"][callback_key]
+                                    await callback(channel_name)
+                            except UnicodeDecodeError as e:
+                                _LOGGER.error(f"Failed to decode channel name: {e}")
                     
                     # Also handle OpCode 0x0031 (control commands from other sources)
                     elif parsed['op_code'] == 0x0031:

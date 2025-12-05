@@ -83,6 +83,7 @@ class TISSwitch(SwitchEntity):
         self._udp_port = udp_port
         self._is_on = False
         self._brightness = 0
+        self._channel_name = None  # Will be populated from OpCode 0xF00F
         
         # Entity attributes
         if channel > 0:
@@ -103,39 +104,61 @@ class TISSwitch(SwitchEntity):
         """Register update callback when entity is added."""
         entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
         callback_key = (self._subnet, self._device_id, self._channel)
+        
+        # Register state update callback
         entry_data["update_callbacks"][callback_key] = self._handle_feedback
-        _LOGGER.debug(f"Registered callback for {self._subnet}.{self._device_id} CH{self._channel}")
+        
+        # Register channel name callback
+        if "name_callbacks" not in entry_data:
+            entry_data["name_callbacks"] = {}
+        entry_data["name_callbacks"][callback_key] = self._handle_channel_name
+        
+        _LOGGER.debug(f"Registered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
         
         # Request initial state from device
         await self._request_state()
     
     async def _request_state(self) -> None:
-        """Request current state from device (OpCode 0xEFFF)."""
+        """Request current state and channel name from device."""
         try:
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect(bind=False)
             
-            packet = TISPacket()
-            packet.src_subnet = 1
-            packet.src_device = 254
-            packet.src_type = 0xFFFE
-            packet.tgt_subnet = self._subnet
-            packet.tgt_device = self._device_id
-            packet.op_code = 0xEFFF  # Device status query
-            packet.additional_data = bytes([self._channel])
-            
-            tis_data = packet.build()
-            
-            # Add SMARTCLOUD header
             from .discovery import get_local_ip
             local_ip = get_local_ip()
             ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            client.send_to(full_packet, self._gateway_ip)
+            # Request 1: Multi-channel status (OpCode 0x0033)
+            packet1 = TISPacket()
+            packet1.src_subnet = 1
+            packet1.src_device = 254
+            packet1.src_type = 0xFFFE
+            packet1.tgt_subnet = self._subnet
+            packet1.tgt_device = self._device_id
+            packet1.op_code = 0x0033  # Multi-channel status query
+            packet1.additional_data = bytes([])
+            
+            tis_data1 = packet1.build()
+            full_packet1 = ip_bytes + b'SMARTCLOUD' + tis_data1
+            client.send_to(full_packet1, self._gateway_ip)
+            
+            # Request 2: Channel name (OpCode 0xF00E)
+            packet2 = TISPacket()
+            packet2.src_subnet = 1
+            packet2.src_device = 254
+            packet2.src_type = 0xFFFE
+            packet2.tgt_subnet = self._subnet
+            packet2.tgt_device = self._device_id
+            packet2.op_code = 0xF00E  # Channel name query
+            packet2.additional_data = bytes([self._channel])
+            
+            tis_data2 = packet2.build()
+            full_packet2 = ip_bytes + b'SMARTCLOUD' + tis_data2
+            client.send_to(full_packet2, self._gateway_ip)
+            
             client.close()
             
-            _LOGGER.debug(f"Requested state from {self._subnet}.{self._device_id} CH{self._channel}")
+            _LOGGER.debug(f"Requested state and name from {self._subnet}.{self._device_id} CH{self._channel}")
         except Exception as e:
             _LOGGER.error(f"Failed to request state: {e}")
     
@@ -145,11 +168,30 @@ class TISSwitch(SwitchEntity):
         self._brightness = brightness
         self.async_write_ha_state()
         _LOGGER.debug(f"Updated {self._attr_name}: is_on={is_on}, brightness={brightness}%")
+    
+    async def _handle_channel_name(self, name: str):
+        """Handle channel name from UDP listener."""
+        self._channel_name = name
+        self.async_write_ha_state()
+        _LOGGER.info(f"Updated {self._attr_name}: channel_name='{name}'")
 
     @property
     def is_on(self) -> bool:
         """Return true if switch is on."""
         return self._is_on
+    
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return entity specific state attributes."""
+        attrs = {
+            "subnet": self._subnet,
+            "device_id": self._device_id,
+            "channel": self._channel,
+            "brightness": self._brightness,
+        }
+        if self._channel_name:
+            attrs["channel_name"] = self._channel_name
+        return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
