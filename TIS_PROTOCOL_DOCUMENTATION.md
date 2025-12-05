@@ -1,207 +1,207 @@
-# TIS Protocol & Database Documentation
+# TIS Protokol & Veritabanı Dokümantasyonu
 
-**Generated:** 2025-12-05  
-**Source:** tis.db3 (TIS DevSearch Configuration Database)  
-**Purpose:** Complete reference for TIS Home Automation Protocol implementation
-
----
-
-## Table of Contents
-
-1. [Protocol OpCodes](#protocol-opcodes)
-2. [Packet Structure](#packet-structure)
-3. [Device Types](#device-types)
-4. [Channel Configurations](#channel-configurations)
-5. [Important Findings](#important-findings)
+**Oluşturulma:** 2025-12-05  
+**Kaynak:** tis.db3 (TIS DevSearch Yapılandırma Veritabanı)  
+**Amaç:** TIS Ev Otomasyon Protokolü implementasyonu için eksiksiz referans
 
 ---
 
-## Protocol OpCodes
+## İçindekiler
 
-### Discovered OpCodes (from TIS DevSearch packet analysis)
+1. [Protokol OpCode'ları](#protokol-opcodeları)
+2. [Paket Yapısı](#paket-yapısı)
+3. [Cihaz Tipleri](#cihaz-tipleri)
+4. [Kanal Yapılandırmaları](#kanal-yapılandırmaları)
+5. [Önemli Bulgular](#önemli-bulgular)
 
-| OpCode | Direction | Description | Additional Data |
-|--------|-----------|-------------|-----------------|
-| `0x0031` | → Device | Channel control command | `[channel, 0x00, brightness, ...]` |
-| `0x0032` | ← Device | Channel feedback/status | `[channel, 0xF8, brightness, ...]` |
-| `0x0033` | → Device | Multi-channel status query | Empty (requests all channels) |
-| `0x0034` | ← Device | Multi-channel status response | 24 bytes (one per channel) |
-| `0xF00E` | → Device | Channel name query | `[channel_number]` |
-| `0xF00F` | ← Device | Channel name response | `[channel, ...UTF-8 name bytes...]` |
-| `0xEFFD` | → Device | Device info query | Variable |
-| `0xEFFE` | ← Device | Device info response | Variable |
-| `0xF00A` | → Device | Unknown function query | Variable |
-| `0xF00B` | ← Device | Unknown function response | Variable |
-| `0xF012` | → Device | Unknown function query | Variable |
-| `0xF013` | ← Device | Unknown function response | Variable |
+---
 
-### Brightness Encoding
+## Protokol OpCode'ları
 
-- **Range:** 0-248 (raw value)
-- **Conversion:** `brightness_pct = (raw_value / 248.0) * 100`
-- **States:**
-  - `0` = OFF
-  - `1-248` = ON with brightness level (0.4% - 100%)
+### Keşfedilen OpCode'lar (TIS DevSearch paket analizinden)
 
-### OpCode 0x0032 (Feedback) Packet Structure
+| OpCode | Yön | Açıklama | Ek Veri |
+|--------|-----|----------|---------|
+| `0x0031` | → Cihaz | Kanal kontrol komutu | `[kanal, 0x00, parlaklık, ...]` |
+| `0x0032` | ← Cihaz | Kanal geri bildirimi/durum | `[kanal, 0xF8, parlaklık, ...]` |
+| `0x0033` | → Cihaz | Çok kanallı durum sorgusu | Boş (tüm kanalları ister) |
+| `0x0034` | ← Cihaz | Çok kanallı durum yanıtı | 24 byte (kanal başına bir) |
+| `0xF00E` | → Cihaz | Kanal adı sorgusu | `[kanal_numarası]` |
+| `0xF00F` | ← Cihaz | Kanal adı yanıtı | `[kanal, ...UTF-8 ad byte'ları...]` |
+| `0xEFFD` | → Cihaz | Cihaz bilgi sorgusu | Değişken |
+| `0xEFFE` | ← Cihaz | Cihaz bilgi yanıtı | Değişken |
+| `0xF00A` | → Cihaz | Bilinmeyen fonksiyon sorgusu | Değişken |
+| `0xF00B` | ← Cihaz | Bilinmeyen fonksiyon yanıtı | Değişken |
+| `0xF012` | → Cihaz | Bilinmeyen fonksiyon sorgusu | Değişken |
+| `0xF013` | ← Cihaz | Bilinmeyen fonksiyon yanıtı | Değişken |
+
+### Parlaklık Kodlaması
+
+- **Aralık:** 0-248 (ham değer)
+- **Dönüşüm:** `parlaklık_yüzde = (ham_değer / 248.0) * 100`
+- **Durumlar:**
+  - `0` = KAPALI
+  - `1-248` = AÇIK parlaklık seviyesi ile (0.4% - 100%)
+
+### OpCode 0x0032 (Geri Bildirim) Paket Yapısı
 
 ```
-additional_data[0] = Channel number (0-23)
-additional_data[1] = 0xF8 (max brightness constant, always 248)
-additional_data[2] = Actual brightness (0-248)
-additional_data[3+] = Reserved/unused
+additional_data[0] = Kanal numarası (0-23)
+additional_data[1] = 0xF8 (maks parlaklık sabiti, her zaman 248)
+additional_data[2] = Gerçek parlaklık (0-248)
+additional_data[3+] = Rezerve/kullanılmıyor
 ```
 
-**Important:** Index 2 contains the actual brightness, NOT index 1!
+**Önemli:** İndeks 2 gerçek parlaklığı içerir, indeks 1 DEĞİL!
 
-### OpCode 0x0034 (Multi-Channel Status) Packet Structure
+### OpCode 0x0034 (Çok Kanallı Durum) Paket Yapısı
 
 ```
-additional_data[0]  = CH0 brightness (0-248)
-additional_data[1]  = CH1 brightness (0-248)
+additional_data[0]  = CH0 parlaklığı (0-248)
+additional_data[1]  = CH1 parlaklığı (0-248)
 ...
-additional_data[23] = CH23 brightness (0-248)
+additional_data[23] = CH23 parlaklığı (0-248)
 ```
 
-Total: 24 bytes, one per channel
+Toplam: 24 byte, kanal başına bir
 
-### OpCode 0xF00F (Channel Name) Packet Structure
+### OpCode 0xF00F (Kanal Adı) Paket Yapısı
 
 ```
-additional_data[0] = Channel number (0-23)
-additional_data[1+] = UTF-8 encoded channel name (max 20 bytes)
+additional_data[0] = Kanal numarası (0-23)
+additional_data[1+] = UTF-8 kodlu kanal adı (maks 20 byte)
 ```
 
-**Examples:**
+**Örnekler:**
 - `[0, 0x42, 0x69, 0x6C, 0x69, 0x6E, 0x6D, 0x69, 0x79, 0x6F, 0x72]` = CH0: "Bilinmiyor"
 - `[5, 0x4B, 0x4F, 0x52, 0x49, 0x44, 0x4F, 0x52]` = CH5: "KORIDOR"
 - `[12, 0x4C, 0x41, 0x56, 0x41, 0x42, 0x4F]` = CH12: "LAVABO"
 
-**Note:** UTF-8 encoding supports Turkish characters (İ, Ğ, Ş, Ç, Ö, Ü)
+**Not:** UTF-8 kodlaması Türkçe karakterleri destekler (İ, Ğ, Ş, Ç, Ö, Ü)
 
 ---
 
-## Packet Structure
+## Paket Yapısı
 
-### Full UDP Packet Format
+### Tam UDP Paket Formatı
 
 ```
 [PC IP (4 bytes)] + "SMARTCLOUD" (10 bytes) + [TIS Packet]
 ```
 
-### TIS Packet Structure
+### TIS Paket Yapısı
 
-| Field | Size | Description |
-|-------|------|-------------|
-| `src_subnet` | 1 byte | Source subnet ID (0-255) |
-| `src_device` | 1 byte | Source device ID (0-255) |
-| `src_type` | 2 bytes | Source device type code |
-| `tgt_subnet` | 1 byte | Target subnet ID (0-255) |
-| `tgt_device` | 1 byte | Target device ID (0-255) |
-| `op_code` | 2 bytes | Operation code (see table above) |
-| `additional_data_length` | 1 byte | Length of additional data |
-| `additional_data` | Variable | Command/response data |
+| Alan | Boyut | Açıklama |
+|------|-------|-------|
+| `src_subnet` | 1 byte | Kaynak subnet ID (0-255) |
+| `src_device` | 1 byte | Kaynak cihaz ID (0-255) |
+| `src_type` | 2 byte | Kaynak cihaz tip kodu |
+| `tgt_subnet` | 1 byte | Hedef subnet ID (0-255) |
+| `tgt_device` | 1 byte | Hedef cihaz ID (0-255) |
+| `op_code` | 2 byte | İşlem kodu (yukarıdaki tabloya bakın) |
+| `additional_data_length` | 1 byte | Ek veri uzunluğu |
+| `additional_data` | Değişken | Komut/yanıt verisi |
 
-**Total Header Size:** 9 bytes (before additional_data)
+**Toplam Başlık Boyutu:** 9 byte (additional_data'dan önce)
 
-### Example Packet (Turn ON CH5 at 50% brightness)
+### Örnek Paket (CH5'i %50 parlaklıkta AÇ)
 
 ```
-Source: Subnet 1, Device 254 (Controller)
-Target: Subnet 1, Device 10 (RCU-24R20Z)
-OpCode: 0x0031 (Control)
-Additional Data: [0x05, 0x00, 0x7C] (CH5, reserved, brightness=124)
+Kaynak: Subnet 1, Cihaz 254 (Kontrolör)
+Hedef: Subnet 1, Cihaz 10 (RCU-24R20Z)
+OpCode: 0x0031 (Kontrol)
+Ek Veri: [0x05, 0x00, 0x7C] (CH5, rezerve, parlaklık=124)
 ```
 
-Raw bytes:
+Ham byte'lar:
 ```
 01 FE FF FE 01 0A 00 31 03 05 00 7C
-│  │  │  │  │  │  │  │  │  │  │  └─ Brightness (124 = ~50%)
-│  │  │  │  │  │  │  │  │  │  └──── Reserved (0x00)
-│  │  │  │  │  │  │  │  │  └─────── Channel (5)
-│  │  │  │  │  │  │  │  └────────── Data length (3)
+│  │  │  │  │  │  │  │  │  │  │  └─ Parlaklık (124 = ~%50)
+│  │  │  │  │  │  │  │  │  │  └──── Rezerve (0x00)
+│  │  │  │  │  │  │  │  │  └─────── Kanal (5)
+│  │  │  │  │  │  │  │  └────────── Veri uzunluğu (3)
 │  │  │  │  │  │  │  └───────────── OpCode (0x0031)
-│  │  │  │  │  └──────────────────── Target device (10)
-│  │  │  │  └─────────────────────── Target subnet (1)
-│  │  └────────────────────────────── Source type (0xFFFE)
-│  └───────────────────────────────── Source device (254)
-└──────────────────────────────────── Source subnet (1)
+│  │  │  │  │  └──────────────────── Hedef cihaz (10)
+│  │  │  │  └─────────────────────── Hedef subnet (1)
+│  │  └────────────────────────────── Kaynak tipi (0xFFFE)
+│  └───────────────────────────────── Kaynak cihaz (254)
+└──────────────────────────────────── Kaynak subnet (1)
 ```
 
 ---
 
-## Device Types
+## Cihaz Tipleri
 
-### Gateway/Bridge
+### Gateway/Köprü
 
-| Type | Model | Description |
-|------|-------|-------------|
-| 186 | Unknown | TIS Gateway/Bridge |
+| Tip | Model | Açıklama |
+|-----|-------|----------|
+| 186 | Bilinmiyor | TIS Gateway/Köprü |
 
-### Multi-Channel Relay Modules
+### Çok Kanallı Röle Modülleri
 
-| Type | Model | Channels | Description |
-|------|-------|----------|-------------|
-| 214 | Unknown | 24 | RCU-24R20Z (OLD type code) |
-| **32811** | **RCU-24R20Z** | **24** | **24 channel relay (CURRENT)** |
-| 32813 | RCU-20R20Z-IP | 20 | 20 channel relay with IP |
-| 7098 | RCU-8OUT-8IN | 8 | Room controller (8 out, 8 in) |
-| 424 | RLY-4CH-10A | 4 | 4 channel 10A relay |
-| 428 | RLY-8CH-16A | 8 | 8 channel 16A relay |
-| 440 | VLC-12CH-10A | 12 | 12 channel valve/lighting controller |
+| Tip | Model | Kanal | Açıklama |
+|-----|-------|-------|----------|
+| 214 | Bilinmiyor | 24 | RCU-24R20Z (ESKİ tip kodu) |
+| **32811** | **RCU-24R20Z** | **24** | **24 kanallı röle (GÜNCEL)** |
+| 32813 | RCU-20R20Z-IP | 20 | IP'li 20 kanallı röle |
+| 7098 | RCU-8OUT-8IN | 8 | Oda kontrolörü (8 çıkış, 8 giriş) |
+| 424 | RLY-4CH-10A | 4 | 4 kanallı 10A röle |
+| 428 | RLY-8CH-16A | 8 | 8 kanallı 16A röle |
+| 440 | VLC-12CH-10A | 12 | 12 kanallı valf/aydınlatma kontrolörü |
 
-### Dimmer Modules
+### Dimmer Modülleri
 
-| Type | Model | Channels | Description |
-|------|-------|----------|-------------|
-| 600 | DIM-6CH-2A | 6 | 6 channel 2A dimmer |
-| 601 | DIM-4CH-3A | 4 | 4 channel 3A dimmer |
-| 602 | DIM-2CH-6A | 2 | 2 channel 6A dimmer |
-| 7090 | TIS-DIM-4CH-1A | 4 | 4 channel 1A dimmer |
-| 7092 | DIM-TE-2CH-3A | 2 | TE 2 channel 3A dimmer |
-| 7094 | DIM-TE-4CH-1.5A | 4 | TE 4 channel 1.5A dimmer |
-| 33056 | DIM-TE-8CH-1A | 8 | TE 8 channel 1A dimmer |
+| Tip | Model | Kanal | Açıklama |
+|-----|-------|-------|----------|
+| 600 | DIM-6CH-2A | 6 | 6 kanallı 2A dimmer |
+| 601 | DIM-4CH-3A | 4 | 4 kanallı 3A dimmer |
+| 602 | DIM-2CH-6A | 2 | 2 kanallı 6A dimmer |
+| 7090 | TIS-DIM-4CH-1A | 4 | 4 kanallı 1A dimmer |
+| 7092 | DIM-TE-2CH-3A | 2 | TE 2 kanallı 3A dimmer |
+| 7094 | DIM-TE-4CH-1.5A | 4 | TE 4 kanallı 1.5A dimmer |
+| 33056 | DIM-TE-8CH-1A | 8 | TE 8 kanallı 1A dimmer |
 
-### DALI Controllers
+### DALI Kontrolörleri
 
-| Type | Model | Channels | Description |
-|------|-------|----------|-------------|
-| 7080 | DALI-64 | 64 | DALI 64 channel controller |
-| 7081 | DALI-PRO-64 | 64 | DALI PRO 64 channel controller |
+| Tip | Model | Kanal | Açıklama |
+|-----|-------|-------|----------|
+| 7080 | DALI-64 | 64 | DALI 64 kanal kontrolör |
+| 7081 | DALI-PRO-64 | 64 | DALI PRO 64 kanal kontrolör |
 
-### Control Panels (MARS Series)
+### Kontrol Panelleri (MARS Serisi)
 
-| Type | Model | Buttons | Description |
-|------|-------|---------|-------------|
-| 7040 | MRS-4G | 4 | MARS 4 button panel |
-| 7050 | MRS-8G | 8 | MARS 8 button panel |
-| 7060 | MRS-12G | 12 | MARS 12 button panel |
-| 7070 | MRS-AC10G | 10 | MARS AC thermostat 10 buttons |
+| Tip | Model | Buton | Açıklama |
+|-----|-------|-------|----------|
+| 7040 | MRS-4G | 4 | MARS 4 butonlu panel |
+| 7050 | MRS-8G | 8 | MARS 8 butonlu panel |
+| 7060 | MRS-12G | 12 | MARS 12 butonlu panel |
+| 7070 | MRS-AC10G | 10 | MARS AC termostat 10 buton |
 
-### Other Device Types
+### Diğer Cihaz Tipleri
 
-| Type | Model | Description |
-|------|-------|-------------|
-| 32 | TIS-DMX-48 | DMX 48 channel controller |
-| 118 | TIS-4DI-IN | 4 zone digital input |
-| 119 | HVAC6-3A-T | HVAC/VAV air condition module |
-| 133 | TIS-PIR-CM | Ceiling PIR sensor |
-| 306 | TIS-IR-CUR | IR emitter with current sensor |
-| 309 | ES-10F-CM | 10 functions sensor |
-| 426 | VLC-6CH-3A | Valve/lighting controller 6CH 3A |
-| 1108 | TIS-AUT-TMR | Automation timer module |
-| 3049 | TIS-SEC-SM | Security module |
+| Tip | Model | Açıklama |
+|-----|-------|----------|
+| 32 | TIS-DMX-48 | DMX 48 kanal kontrolör |
+| 118 | TIS-4DI-IN | 4 bölge dijital giriş |
+| 119 | HVAC6-3A-T | HVAC/VAV klima modülü |
+| 133 | TIS-PIR-CM | Tavan PIR sensörü |
+| 306 | TIS-IR-CUR | Akım sensörlü IR verici |
+| 309 | ES-10F-CM | 10 fonksiyonlu sensör |
+| 426 | VLC-6CH-3A | Valf/aydınlatma kontrolör 6CH 3A |
+| 1108 | TIS-AUT-TMR | Otomasyon zamanlayıcı modül |
+| 3049 | TIS-SEC-SM | Güvenlik modülü |
 
-**Total Device Types in Database:** 191
+**Veritabanındaki Toplam Cihaz Tipi:** 191
 
 ---
 
-## Channel Configurations
+## Kanal Yapılandırmaları
 
-### Devices with Channel Mapping
+### Kanal Eşlemesi Olan Cihazlar
 
-| Type | Model | Channel Count |
-|------|-------|---------------|
+| Tip | Model | Kanal Sayısı |
+|-----|-------|--------------|
 | 32 | TIS-DMX-48 | 48 |
 | 424 | RLY-4CH-10A | 4 |
 | 426 | VLC-6CH-3A | 6 |
@@ -234,198 +234,198 @@ Raw bytes:
 | 32851 | VEN-3S-3R-HC | 3 |
 | 33056 | DIM-TE-8CH-1A | 8 |
 
-**Total Configured Devices:** 31
+**Toplam Yapılandırılmış Cihaz:** 31
 
 ---
 
-## Important Findings
+## Önemli Bulgular
 
-### 1. RCU-24R20Z Type Code Change
+### 1. RCU-24R20Z Tip Kodu Değişikliği
 
-**Discovery:** RCU-24R20Z has TWO type codes in the database:
-- **Old Code:** 214 (no model name in db)
-- **New Code:** 32811 (with model name "RCU-24R20Z")
+**Keşif:** RCU-24R20Z'nin veritabanında İKİ tip kodu var:
+- **Eski Kod:** 214 (db'de model adı yok)
+- **Yeni Kod:** 32811 (model adı "RCU-24R20Z" ile)
 
-**Recommendation:** Use type code **32811** for device detection, but handle both codes for backward compatibility.
+**Öneri:** Cihaz tespiti için tip kodu **32811** kullanın, ancak geriye dönük uyumluluk için her iki kodu da işleyin.
 
-### 2. Brightness Parsing Bug
+### 2. Parlaklık Ayrıştırma Hatası
 
-**Issue:** Original implementation read `additional_data[1]` which always contains `0xF8` (248), causing 248% brightness display.
+**Sorun:** Orijinal implementasyon her zaman `0xF8` (248) içeren `additional_data[1]`'i okuyordu, bu da %248 parlaklık gösterimine neden oluyordu.
 
-**Solution:** Read `additional_data[2]` for actual brightness value (0-248).
+**Çözüm:** Gerçek parlaklık değeri (0-248) için `additional_data[2]`'yi okuyun.
 
-**Affected OpCodes:** 0x0032 (feedback)
+**Etkilenen OpCode'lar:** 0x0032 (geri bildirim)
 
-### 3. Multi-Channel Query Protocol
+### 3. Çok Kanallı Sorgu Protokolü
 
-**Discovery:** TIS DevSearch uses OpCode 0x0033/0x0034 to query all channels at once, instead of querying each channel individually.
+**Keşif:** TIS DevSearch her kanalı ayrı ayrı sorgulamak yerine, tüm kanalları bir kerede almak için OpCode 0x0033/0x0034 kullanıyor.
 
-**Benefits:**
-- Single request gets status of all 24 channels
-- Reduces network traffic
-- Faster device state refresh
+**Avantajlar:**
+- Tek istek ile tüm 24 kanalın durumunu alır
+- Ağ trafiğini azaltır
+- Daha hızlı cihaz durum güncelleme
 
-### 4. Channel Name Support
+### 4. Kanal Adı Desteği
 
-**Discovery:** OpCode 0xF00E/0xF00F retrieves channel names stored in device memory.
+**Keşif:** OpCode 0xF00E/0xF00F cihaz hafızasında saklanan kanal adlarını alır.
 
-**Usage:**
-- Send 0xF00E with channel number
-- Receive 0xF00F with UTF-8 encoded name
-- Maximum 20 bytes for name
-- Supports Turkish characters
+**Kullanım:**
+- Kanal numarası ile 0xF00E gönder
+- UTF-8 kodlu ad ile 0xF00F al
+- Ad için maksimum 20 byte
+- Türkçe karakterleri destekler
 
-**Examples from real device:**
+**Gerçek cihazdan örnekler:**
 - "Bilinmiyor" (Unknown)
-- "KORIDOR TEKLİ" (Single corridor)
-- "LAVABO" (Bathroom sink)
-- "MUTFAK" (Kitchen)
+- "KORIDOR TEKLİ" (Tek koridor)
+- "LAVABO" (Banyo lavabosu)
+- "MUTFAK" (Mutfak)
 
-### 5. Network Configuration
+### 5. Ağ Yapılandırması
 
-**From Database:**
-- Host IP: 192.168.2.124 (TIS DevSearch PC)
-- Filtered Subnet: 1 (only shows subnet 1 devices)
-- Gateway: Subnet 0, Device 0, Type 186
+**Veritabanından:**
+- Host IP: 192.168.2.124 (TIS DevSearch PC'si)
+- Filtrelenmiş Subnet: 1 (sadece subnet 1 cihazlarını gösterir)
+- Gateway: Subnet 0, Cihaz 0, Tip 186
 
-### 6. Project Structure
+### 6. Proje Yapısı
 
-**Room Definitions:**
-- Living Room
-- Kitchen
-- Master Room
-- Kids Room
-- Bath Room
-- homepage (default)
+**Oda Tanımları:**
+- Living Room (Oturma Odası)
+- Kitchen (Mutfak)
+- Master Room (Ana Oda)
+- Kids Room (Çocuk Odası)
+- Bath Room (Banyo)
+- homepage (varsayılan)
 
-**Scene Definitions:**
-- 24 scenes configured
-- All on Subnet 210, Device 210, Area 1
-- Named Scene-01 through Scene-24
+**Sahne Tanımları:**
+- 24 sahne yapılandırılmış
+- Hepsi Subnet 210, Cihaz 210, Alan 1'de
+- Scene-01'den Scene-24'e kadar isimlendirilmiş
 
-### 7. Packet Header Format
+### 7. Paket Başlık Formatı
 
-**Discovery:** Full UDP packets include:
-1. PC IP address (4 bytes) - sender's IP
-2. "SMARTCLOUD" text (10 bytes) - protocol identifier
-3. TIS packet data (variable) - actual command/response
+**Keşif:** Tam UDP paketleri şunları içerir:
+1. PC IP adresi (4 byte) - gönderenin IP'si
+2. "SMARTCLOUD" metni (10 byte) - protokol tanımlayıcı
+3. TIS paket verisi (değişken) - gerçek komut/yanıt
 
-**Example:**
+**Örnek:**
 ```
 [C0 A8 02 7C] + "SMARTCLOUD" + [01 FE FF FE 01 0A 00 31 03 05 00 7C]
 │              │                │
-PC IP          Protocol ID      TIS Packet
+PC IP          Protokol ID      TIS Paketi
 192.168.2.124
 ```
 
 ---
 
-## Implementation Notes
+## Uygulama Notları
 
-### For Home Assistant Integration
+### Home Assistant Entegrasyonu İçin
 
-1. **Device Discovery:**
-   - Listen for broadcasts on UDP port 6000
-   - Look for packets with "SMARTCLOUD" header
-   - Parse device type from `src_type` field
-   - Use type code 32811 to identify RCU-24R20Z
+1. **Cihaz Keşfi:**
+   - UDP port 6000'de broadcast'leri dinle
+   - "SMARTCLOUD" başlığı olan paketleri ara
+   - Cihaz tipini `src_type` alanından ayrıştır
+   - RCU-24R20Z'yi tanımlamak için tip kodu 32811 kullan
 
-2. **Initial State Query:**
-   - Send OpCode 0x0033 to get all channel states
-   - Send OpCode 0xF00E for each channel to get names
-   - Process 0x0034 response (24 bytes)
-   - Process 0xF00F responses (UTF-8 names)
+2. **İlk Durum Sorgusu:**
+   - Tüm kanal durumlarını almak için OpCode 0x0033 gönder
+   - Her kanal için adları almak için OpCode 0xF00E gönder
+   - 0x0034 yanıtını işle (24 byte)
+   - 0xF00F yanıtlarını işle (UTF-8 adlar)
 
-3. **Real-Time Feedback:**
-   - Listen for OpCode 0x0032 packets
-   - Parse brightness from `additional_data[2]`
-   - Convert 0-248 to 0-100%
-   - Update entity state immediately
+3. **Gerçek Zamanlı Geri Bildirim:**
+   - OpCode 0x0032 paketlerini dinle
+   - `additional_data[2]`'den parlaklığı ayrıştır
+   - 0-248'i 0-100%'ye dönüştür
+   - Entity durumunu hemen güncelle
 
-4. **Channel Control:**
-   - Send OpCode 0x0031 with channel and brightness
-   - Format: `[channel, 0x00, brightness_raw]`
-   - Gateway IP from configuration
-   - Source: Subnet 1, Device 254
+4. **Kanal Kontrolü:**
+   - Kanal ve parlaklık ile OpCode 0x0031 gönder
+   - Format: `[kanal, 0x00, parlaklık_ham]`
+   - Yapılandırmadan Gateway IP
+   - Kaynak: Subnet 1, Cihaz 254
 
-### For TIS Addon
+### TIS Addon İçin
 
-1. **Debug Tool:**
-   - Decode OpCode 0xF00F as UTF-8 text
-   - Show channel names in debug output
-   - Display all 24 channels from 0x0034 response
-   - Color-code packet types
+1. **Debug Aracı:**
+   - OpCode 0xF00F'u UTF-8 metin olarak decode et
+   - Debug çıktısında kanal adlarını göster
+   - 0x0034 yanıtından tüm 24 kanalı göster
+   - Paket tiplerini renk kodla
 
-2. **Device List:**
-   - Use `TIS_DATABASE_ANALYSIS.json` for type mapping
-   - Show model name from database
-   - Display channel count for multi-channel devices
-   - Indicate if device has channel name support
-
----
-
-## Database Tables Reference
-
-### Key Tables
-
-1. **tbl_map_type** (191 rows)
-   - Maps device type codes to model names
-   - Contains descriptions for each device type
-
-2. **tbl_channel** (31 rows)
-   - Maps device types to channel counts
-   - Defines which devices are multi-channel
-
-3. **tbl_project_network** (1 row)
-   - Gateway configuration
-   - Server IP and domain settings
-
-4. **tbl_project_room** (6 rows)
-   - Room definitions
-   - Display types and icons
-
-5. **tbl_project_scene** (24 rows)
-   - Scene configurations
-   - Subnet, device, area, scene number mappings
+2. **Cihaz Listesi:**
+   - Tip eşleme için `TIS_DATABASE_ANALYSIS.json` kullan
+   - Veritabanından model adını göster
+   - Çok kanallı cihazlar için kanal sayısını göster
+   - Cihazın kanal adı desteği olup olmadığını belirt
 
 ---
 
-## Future Research Needed
+## Veritabanı Tabloları Referansı
 
-### Unknown OpCodes
+### Ana Tablolar
 
-- **0xF00A/0xF00B:** Unknown function
-- **0xF012/0xF013:** Unknown function
-- **0xEFFD/0xEFFE:** Device info format unknown
+1. **tbl_map_type** (191 satır)
+   - Cihaz tip kodlarını model adlarına eşler
+   - Her cihaz tipi için açıklamalar içerir
 
-### Missing Documentation
+2. **tbl_channel** (31 satır)
+   - Cihaz tiplerini kanal sayılarına eşler
+   - Hangi cihazların çok kanallı olduğunu tanımlar
 
-- Scene activation protocol
-- Security system commands
-- HVAC/thermostat control
-- Audio system commands
-- Sensor data format
-- PIR sensor events
+3. **tbl_project_network** (1 satır)
+   - Gateway yapılandırması
+   - Sunucu IP ve domain ayarları
 
----
+4. **tbl_project_room** (6 satır)
+   - Oda tanımları
+   - Görüntü tipleri ve ikonlar
 
-## Revision History
-
-- **2025-12-05:** Initial documentation
-  - Analyzed tis.db3 database
-  - Documented 191 device types
-  - Documented 31 channel configurations
-  - Reverse-engineered OpCode 0xF00F (channel names)
-  - Reverse-engineered OpCode 0x0034 (multi-channel status)
+5. **tbl_project_scene** (24 satır)
+   - Sahne yapılandırmaları
+   - Subnet, cihaz, alan, sahne numarası eşlemeleri
 
 ---
 
-**Generated by:** TIS Protocol Analysis Tool  
-**Source Files:**
-- `tis.db3` (TIS DevSearch database)
-- `TIS_DATABASE_ANALYSIS.json` (exported data)
-- Packet captures from TIS DevSearch network traffic
+## Gelecek Araştırma Gereksinimleri
 
-**Related Projects:**
-- [TIS Home Assistant Integration](https://github.com/Teklojik-Elektronik/tis-homeassistant)
+### Bilinmeyen OpCode'lar
+
+- **0xF00A/0xF00B:** Bilinmeyen fonksiyon
+- **0xF012/0xF013:** Bilinmeyen fonksiyon
+- **0xEFFD/0xEFFE:** Cihaz bilgi formatı bilinmiyor
+
+### Eksik Dokümantasyon
+
+- Sahne aktivasyon protokolü
+- Güvenlik sistemi komutları
+- HVAC/termostat kontrolü
+- Ses sistemi komutları
+- Sensör veri formatı
+- PIR sensör olayları
+
+---
+
+## Revizyon Geçmişi
+
+- **2025-12-05:** İlk dokümantasyon
+  - tis.db3 veritabanı analiz edildi
+  - 191 cihaz tipi dokümante edildi
+  - 31 kanal yapılandırması dokümante edildi
+  - OpCode 0xF00F tersine mühendislik yapıldı (kanal adları)
+  - OpCode 0x0034 tersine mühendislik yapıldı (çok kanallı durum)
+
+---
+
+**Oluşturan:** TIS Protokol Analiz Aracı  
+**Kaynak Dosyalar:**
+- `tis.db3` (TIS DevSearch veritabanı)
+- `TIS_DATABASE_ANALYSIS.json` (dışa aktarılan veri)
+- TIS DevSearch ağ trafiğinden paket yakalamaları
+
+**İlgili Projeler:**
+- [TIS Home Assistant Entegrasyonu](https://github.com/Teklojik-Elektronik/tis-homeassistant)
 - [TIS Addon](https://github.com/Teklojik-Elektronik/tis_addon)
