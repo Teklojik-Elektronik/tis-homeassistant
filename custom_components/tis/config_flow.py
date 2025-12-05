@@ -19,15 +19,15 @@ from .discovery import discover_tis_devices
 _LOGGER = logging.getLogger(__name__)
 
 
-class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for TIS Control."""
 
     VERSION = 1
-
+    
     def __init__(self):
         """Initialize."""
         self._discovered_devices = {}
-
+    
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
@@ -41,14 +41,13 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None or self._async_current_entries():
             # Already configured or user confirmed
             return self.async_abort(reason="already_configured")
-
+        
         # Create a single entry for TIS system (no per-device config)
         return self.async_create_entry(
             title="TIS Akıllı Ev Sistemi",
             data={
                 "configured": True,
-                "gateway_ip": "192.168.1.200",
-                "udp_port": 6000,
+                "web_ui_port": 8888,
             },
         )
 
