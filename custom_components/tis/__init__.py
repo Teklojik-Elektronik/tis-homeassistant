@@ -212,8 +212,32 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        _LOGGER.info("TIS Integration unloaded successfully")
     
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle removal of an entry (integration deleted completely)."""
+    _LOGGER.warning("TIS Integration is being removed - cleaning up all devices...")
+    
+    # Clean up /config/tis_devices.json file
+    devices_file = "/config/tis_devices.json"
+    try:
+        if os.path.exists(devices_file):
+            # Backup before deleting
+            backup_file = "/config/tis_devices.json.backup"
+            import shutil
+            shutil.copy2(devices_file, backup_file)
+            _LOGGER.info(f"Backup created: {backup_file}")
+            
+            # Delete the devices file
+            os.remove(devices_file)
+            _LOGGER.info(f"✅ Deleted {devices_file} - All TIS devices removed")
+        else:
+            _LOGGER.info("No devices file to clean up")
+    except Exception as e:
+        _LOGGER.error(f"Failed to clean up devices file: {e}", exc_info=True)
 
 
 async def async_remove_config_entry_device(
