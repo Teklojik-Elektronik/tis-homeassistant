@@ -1,0 +1,1824 @@
+{
+  "metadata": {
+    "source_file": "tis.db3",
+    "description": "TIS DevSearch Configuration Database - Complete Analysis",
+    "analyzed_on": "2025-12-05T11:35:07.170326",
+    "database_last_modified": "2025-12-02 12:01:18",
+    "total_tables": 50,
+    "purpose": "Device type mappings, channel configurations, and protocol references for TIS Home Automation System"
+  },
+  "network_configuration": {
+    "host_ip": "192.168.2.124",
+    "filtered_subnet": 1,
+    "gateway_device": {
+      "subnet": 0,
+      "device_id": 0,
+      "type": 186,
+      "description": "TIS Gateway/Bridge"
+    }
+  },
+  "device_types": {
+    "32": {
+      "db_id": 1,
+      "type_code": 32,
+      "model": "TIS-DMX-48",
+      "description": "TIS DMX 48CH Controller",
+      "channels": 48
+    },
+    "118": {
+      "db_id": 2,
+      "type_code": 118,
+      "model": "TIS-4DI-IN",
+      "description": "4 Zone Dry Contact DIGITAL INPUT",
+      "channels": null
+    },
+    "119": {
+      "db_id": 3,
+      "type_code": 119,
+      "model": "HVAC6-3A-T",
+      "description": "HVAC,VAV Air Condition Module",
+      "channels": null
+    },
+    "133": {
+      "db_id": 4,
+      "type_code": 133,
+      "model": "TIS-PIR-CM",
+      "description": "Ceiling PIR Sensor",
+      "channels": null
+    },
+    "306": {
+      "db_id": 5,
+      "type_code": 306,
+      "model": "TIS-IR-CUR",
+      "description": "IR Emitter WITH CURRENT SENSOR",
+      "channels": null
+    },
+    "309": {
+      "db_id": 6,
+      "type_code": 309,
+      "model": "ES-10F-CM",
+      "description": "10 Functions Sensor",
+      "channels": null
+    },
+    "424": {
+      "db_id": 7,
+      "type_code": 424,
+      "model": "RLY-4CH-10A",
+      "description": "Relay 4ch 10A",
+      "channels": 4
+    },
+    "426": {
+      "db_id": 8,
+      "type_code": 426,
+      "model": "VLC-6CH-3A",
+      "description": "Valve Lighting Controler 6CH 3A",
+      "channels": 6
+    },
+    "428": {
+      "db_id": 9,
+      "type_code": 428,
+      "model": "RLY-8CH-16A",
+      "description": "Relay 8ch 16A",
+      "channels": 8
+    },
+    "440": {
+      "db_id": 10,
+      "type_code": 440,
+      "model": "VLC-12CH-10A",
+      "description": "Valve Lighting Controler 12CH 10A",
+      "channels": 12
+    },
+    "600": {
+      "db_id": 11,
+      "type_code": 600,
+      "model": "DIM-6CH-2A",
+      "description": "Dimmer 6ch 2A",
+      "channels": 6
+    },
+    "601": {
+      "db_id": 12,
+      "type_code": 601,
+      "model": "DIM-4CH-3A",
+      "description": "Dimmer 4CH 3A",
+      "channels": 4
+    },
+    "602": {
+      "db_id": 13,
+      "type_code": 602,
+      "model": "DIM-2CH-6A",
+      "description": "Dimmer 2CH 6A",
+      "channels": 2
+    },
+    "1108": {
+      "db_id": 14,
+      "type_code": 1108,
+      "model": "TIS-AUT-TMR",
+      "description": "AUTOMATION TIMER MODULE",
+      "channels": null
+    },
+    "1201": {
+      "db_id": 15,
+      "type_code": 1201,
+      "model": "IP-COM-PORT-OLD",
+      "description": "IP COM PORT GATEWAY",
+      "channels": null
+    },
+    "3049": {
+      "db_id": 16,
+      "type_code": 3049,
+      "model": "TIS-SEC-SM",
+      "description": "SECURITY MODULE",
+      "channels": null
+    },
+    "6000": {
+      "db_id": 17,
+      "type_code": 6000,
+      "model": "TER-4G",
+      "description": "Terre 4G",
+      "channels": null
+    },
+    "6010": {
+      "db_id": 18,
+      "type_code": 6010,
+      "model": "TER-ACT",
+      "description": "Terre AC",
+      "channels": null
+    },
+    "6020": {
+      "db_id": 19,
+      "type_code": 6020,
+      "model": "TER-AUD",
+      "description": "Terre MUSIC",
+      "channels": null
+    },
+    "7040": {
+      "db_id": 20,
+      "type_code": 7040,
+      "model": "MRS-4G",
+      "description": "MARS 4 Buttons",
+      "channels": null
+    },
+    "7050": {
+      "db_id": 21,
+      "type_code": 7050,
+      "model": "MRS-8G",
+      "description": "MARS 8 Buttons",
+      "channels": null
+    },
+    "7060": {
+      "db_id": 22,
+      "type_code": 7060,
+      "model": "MRS-12G",
+      "description": "MARS 12 Buttons",
+      "channels": null
+    },
+    "7070": {
+      "db_id": 23,
+      "type_code": 7070,
+      "model": "MRS-AC10G",
+      "description": "MARS AC THERMOSTAT 10 BUTTONS",
+      "channels": null
+    },
+    "7080": {
+      "db_id": 24,
+      "type_code": 7080,
+      "model": "DALI-64",
+      "description": "TIS DALI 64CH Controller",
+      "channels": 64
+    },
+    "7081": {
+      "db_id": 25,
+      "type_code": 7081,
+      "model": "DALI-PRO-64",
+      "description": "TIS DALI PRO 64CH Controller",
+      "channels": 64
+    },
+    "7090": {
+      "db_id": 26,
+      "type_code": 7090,
+      "model": "TIS-DIM-4CH-1A",
+      "description": "Dimmer 4CH 1A",
+      "channels": 4
+    },
+    "7092": {
+      "db_id": 27,
+      "type_code": 7092,
+      "model": "DIM-TE-2CH-3A",
+      "description": "TE Dimmer 2CH 3A",
+      "channels": 2
+    },
+    "7094": {
+      "db_id": 28,
+      "type_code": 7094,
+      "model": "DIM-TE-4CH-1.5A",
+      "description": "TE Dimmer 4CH 1.5A",
+      "channels": 4
+    },
+    "7098": {
+      "db_id": 29,
+      "type_code": 7098,
+      "model": "RCU-8OUT-8IN",
+      "description": "Room Control Unit 8 In 8 Out",
+      "channels": 8
+    },
+    "7099": {
+      "db_id": 30,
+      "type_code": 7099,
+      "model": "RLY-6CH-0-10V",
+      "description": "Dimmer 6CH 0-10 Volte",
+      "channels": 6
+    },
+    "9010": {
+      "db_id": 31,
+      "type_code": 9010,
+      "model": "LUNA-TFT-43",
+      "description": "LUNA TFT TOUCH SCREEN 4.3",
+      "channels": null
+    },
+    "9110": {
+      "db_id": 32,
+      "type_code": 9110,
+      "model": "LUNA-9GANGS",
+      "description": "LUNA 9 GANGS TOUCH PANEL",
+      "channels": null
+    },
+    "9210": {
+      "db_id": 33,
+      "type_code": 9210,
+      "model": "LUNA-BEDSIDE",
+      "description": "LUNA BED SIDE TOUCH PANEL",
+      "channels": null
+    },
+    "9310": {
+      "db_id": 34,
+      "type_code": 9310,
+      "model": "LUNA-BELL-3S",
+      "description": "HOTEL BELL WITH SERVICES",
+      "channels": null
+    },
+    "32784": {
+      "db_id": 35,
+      "type_code": 32784,
+      "model": "TIS-M3-MOTOR",
+      "description": "TIS M3 Motor",
+      "channels": null
+    },
+    "32787": {
+      "db_id": 36,
+      "type_code": 32787,
+      "model": "IO-8G",
+      "description": "IO 8G Panel",
+      "channels": null
+    },
+    "32788": {
+      "db_id": 37,
+      "type_code": 32788,
+      "model": "IO-AC-4G",
+      "description": "IO AC Panel with 4G",
+      "channels": null
+    },
+    "32789": {
+      "db_id": 38,
+      "type_code": 32789,
+      "model": "VEN-6S-BUS",
+      "description": "Venera Switch 6CH",
+      "channels": null
+    },
+    "32791": {
+      "db_id": 39,
+      "type_code": 32791,
+      "model": "TIT-2G-BUS",
+      "description": "Titan Switch 2CH",
+      "channels": null
+    },
+    "32792": {
+      "db_id": 40,
+      "type_code": 32792,
+      "model": "TIT-3G-BUS",
+      "description": "Titan Switch 3CH",
+      "channels": null
+    },
+    "32793": {
+      "db_id": 41,
+      "type_code": 32793,
+      "model": "TIT-4G-BUS",
+      "description": "Titan Switch 4CH",
+      "channels": null
+    },
+    "32794": {
+      "db_id": 42,
+      "type_code": 32794,
+      "model": "TARIQ-8G6R5Z",
+      "description": "TIS TARIQ 8Gang 6Relay 5Zone",
+      "channels": null
+    },
+    "32795": {
+      "db_id": 43,
+      "type_code": 32795,
+      "model": "TARIQ-8G3R5Z1F",
+      "description": "TIS TARIQ 8Gang 3Relay 5Zone 1Fan",
+      "channels": null
+    },
+    "32796": {
+      "db_id": 44,
+      "type_code": 32796,
+      "model": "TARIQ-8G3R5Z2D",
+      "description": "TIS TARIQ 8Gang 3Relay 5Zone 2Dim",
+      "channels": null
+    },
+    "32797": {
+      "db_id": 45,
+      "type_code": 32797,
+      "model": "AC-6VAL-6T",
+      "description": "Valve Controller 6 Zones",
+      "channels": null
+    },
+    "32798": {
+      "db_id": 46,
+      "type_code": 32798,
+      "model": "ADS-BUS-1D",
+      "description": "ADS BUS 1CH TE Dimmer",
+      "channels": 1
+    },
+    "32799": {
+      "db_id": 47,
+      "type_code": 32799,
+      "model": "TIS-MER-ROTATE",
+      "description": "TIS Mercury Rotate Panel",
+      "channels": null
+    },
+    "32800": {
+      "db_id": 48,
+      "type_code": 32800,
+      "model": "TIS-MER-6G-PB",
+      "description": "TIS Mercury 6G Panel",
+      "channels": null
+    },
+    "32801": {
+      "db_id": 49,
+      "type_code": 32801,
+      "model": "TIS-MER-9G-PB",
+      "description": "TIS Mercury 9G Panel",
+      "channels": null
+    },
+    "32802": {
+      "db_id": 50,
+      "type_code": 32802,
+      "model": "TIS-HEALTH-CM",
+      "description": "TIS Health Sensor",
+      "channels": null
+    },
+    "32804": {
+      "db_id": 51,
+      "type_code": 32804,
+      "model": "VEN-2S-BUS",
+      "description": "Venera Switch 2CH",
+      "channels": null
+    },
+    "32805": {
+      "db_id": 52,
+      "type_code": 32805,
+      "model": "VEN-3S-BUS",
+      "description": "Venera Switch 3CH",
+      "channels": null
+    },
+    "32806": {
+      "db_id": 53,
+      "type_code": 32806,
+      "model": "VEN-4S-BUS",
+      "description": "Venera Switch 4CH",
+      "channels": null
+    },
+    "32807": {
+      "db_id": 54,
+      "type_code": 32807,
+      "model": "VEN-AC-3R-HC-BUS",
+      "description": "Venera Thermostat With 3 Relay",
+      "channels": null
+    },
+    "32808": {
+      "db_id": 55,
+      "type_code": 32808,
+      "model": "VEN-AC-4R-HC-BUS",
+      "description": "Venera Thermostat With 4 Relay",
+      "channels": null
+    },
+    "32809": {
+      "db_id": 56,
+      "type_code": 32809,
+      "model": "VEN-AC-5R-LC-BUS",
+      "description": "Venera Thermostat With 5 Relay",
+      "channels": null
+    },
+    "32811": {
+      "db_id": 57,
+      "type_code": 32811,
+      "model": "RCU-24R20Z",
+      "description": "Room Control Unit 20 In 24 Out",
+      "channels": 24
+    },
+    "32812": {
+      "db_id": 58,
+      "type_code": 32812,
+      "model": "TIT-TFT-BUS",
+      "description": "Titan BUS TOUCH SCREEN 2.4",
+      "channels": null
+    },
+    "32813": {
+      "db_id": 59,
+      "type_code": 32813,
+      "model": "RCU-20R20Z-IP",
+      "description": "Room Control Unit 20 In 20 Out",
+      "channels": 20
+    },
+    "32814": {
+      "db_id": 60,
+      "type_code": 32814,
+      "model": "ACM-1D-2Z",
+      "description": "ACM 1 Dimmer With 2 Zone",
+      "channels": null
+    },
+    "32815": {
+      "db_id": 61,
+      "type_code": 32815,
+      "model": "TIS-4T-IN",
+      "description": "4 Temperature Sensor",
+      "channels": null
+    },
+    "32816": {
+      "db_id": 62,
+      "type_code": 32816,
+      "model": "DIM-W06CH10A-TE",
+      "description": "TE Industrial Dimmer 6ch 10A",
+      "channels": 6
+    },
+    "32817": {
+      "db_id": 63,
+      "type_code": 32817,
+      "model": "DIM-W12CH10A-TE",
+      "description": "TE Industrial Dimmer 12CH 10A",
+      "channels": 12
+    },
+    "32818": {
+      "db_id": 64,
+      "type_code": 32818,
+      "model": "ZIG-ACM-2R-2Z",
+      "description": "Zigbee AIR Coupler Module With 2 Relay 2 Zone",
+      "channels": null
+    },
+    "32819": {
+      "db_id": 65,
+      "type_code": 32819,
+      "model": "ZIG-VEN-OUT-HOTEL-HRF-8033",
+      "description": "Zigbee Venera Hotel Outdoor 1T2L HRF Uint",
+      "channels": null
+    },
+    "32822": {
+      "db_id": 66,
+      "type_code": 32822,
+      "model": "MINI-AIR-AUTO-IRE-T",
+      "description": "Mini AIR Emitter With Auto Infrared",
+      "channels": null
+    },
+    "32823": {
+      "db_id": 67,
+      "type_code": 32823,
+      "model": "BUS-PIR-CM",
+      "description": "BUS PIR Motion Sensor",
+      "channels": null
+    },
+    "32824": {
+      "db_id": 68,
+      "type_code": 32824,
+      "model": "BUS-ES-IR",
+      "description": "BUS Energy Servant Sensor With Auto Infrared",
+      "channels": null
+    },
+    "32827": {
+      "db_id": 69,
+      "type_code": 32827,
+      "model": "ADS-3R-BUS",
+      "description": "ADS 3R BUS",
+      "channels": 3
+    },
+    "32828": {
+      "db_id": 70,
+      "type_code": 32828,
+      "model": "ACM-3Z-IN",
+      "description": "AIR Coupler Module With 3 Zone",
+      "channels": null
+    },
+    "32829": {
+      "db_id": 71,
+      "type_code": 32829,
+      "model": "AIR-AUTO-IRE-T",
+      "description": "AIR Emitter With Auto Infrared",
+      "channels": null
+    },
+    "32830": {
+      "db_id": 72,
+      "type_code": 32830,
+      "model": "BUS-AUTO-IRE-T",
+      "description": "BUS Emitter With Auto Infrared",
+      "channels": null
+    },
+    "32831": {
+      "db_id": 73,
+      "type_code": 32831,
+      "model": "AIR-ES-IR",
+      "description": "AIR Energy Servant Sensor Witch Auto Infrared",
+      "channels": null
+    },
+    "32832": {
+      "db_id": 74,
+      "type_code": 32832,
+      "model": "ADS-1D-1Z",
+      "description": "ADS 1CH TE Dimmer With 1 Zone Input",
+      "channels": 1
+    },
+    "32833": {
+      "db_id": 75,
+      "type_code": 32833,
+      "model": "ADS-2R-2Z",
+      "description": "ADS 2 Relay 2 Zone Input",
+      "channels": 2
+    },
+    "32834": {
+      "db_id": 76,
+      "type_code": 32834,
+      "model": "AIR-PIR-CM",
+      "description": "TIS AIR PIR Motion Sensor",
+      "channels": null
+    },
+    "32835": {
+      "db_id": 77,
+      "type_code": 32835,
+      "model": "VEN-4S-4R-HC",
+      "description": "Venera Switch 4CH",
+      "channels": 4
+    },
+    "32836": {
+      "db_id": 78,
+      "type_code": 32836,
+      "model": "VEN-AC-5R-LC",
+      "description": "Venera Thermostat With 5 Relay",
+      "channels": null
+    },
+    "32837": {
+      "db_id": 79,
+      "type_code": 32837,
+      "model": "VEN-AC-4R-HC",
+      "description": "Venera Thermostat With 4 Relay",
+      "channels": null
+    },
+    "32838": {
+      "db_id": 80,
+      "type_code": 32838,
+      "model": "AIR-1IRE-T",
+      "description": "Air Infrared  Emitter With Temperature",
+      "channels": null
+    },
+    "32840": {
+      "db_id": 81,
+      "type_code": 32840,
+      "model": "AIR-2IRE",
+      "description": "Air Infrared 2 Emitter",
+      "channels": null
+    },
+    "32843": {
+      "db_id": 82,
+      "type_code": 32843,
+      "model": "ACM-2R-2Z",
+      "description": "AIR Coupler Module With 2 Relay 2 Zone",
+      "channels": null
+    },
+    "32844": {
+      "db_id": 83,
+      "type_code": 32844,
+      "model": "VEN-2S-2R-HC",
+      "description": "Venera Switch 2CH",
+      "channels": 2
+    },
+    "32845": {
+      "db_id": 84,
+      "type_code": 32845,
+      "model": "VEN-AC-3R-HC",
+      "description": "Venera Thermostat With 3 Relay",
+      "channels": null
+    },
+    "32846": {
+      "db_id": 85,
+      "type_code": 32846,
+      "model": "ADS-4CH-0-10V",
+      "description": "ADS RGBW 0-10 Volte Dimmer",
+      "channels": 4
+    },
+    "32847": {
+      "db_id": 86,
+      "type_code": 32847,
+      "model": "ADS-3R-3Z",
+      "description": "ADS 3 Relay 3 Zone Input",
+      "channels": 3
+    },
+    "32848": {
+      "db_id": 87,
+      "type_code": 32848,
+      "model": "AMP-5S1Z-MTX",
+      "description": "Audio Matrix Player",
+      "channels": null
+    },
+    "32849": {
+      "db_id": 88,
+      "type_code": 32849,
+      "model": "AIR-SOCKET-S",
+      "description": "AIR Socket ON/OFF",
+      "channels": 1
+    },
+    "32850": {
+      "db_id": 89,
+      "type_code": 32850,
+      "model": "VEN-1D-UV",
+      "description": "Venera Universal Dimmer 1Ch",
+      "channels": 1
+    },
+    "32851": {
+      "db_id": 90,
+      "type_code": 32851,
+      "model": "VEN-3S-3R-HC",
+      "description": "Venera Switch 3CH",
+      "channels": 3
+    },
+    "32852": {
+      "db_id": 91,
+      "type_code": 32852,
+      "model": "TIS-AIR-BUS",
+      "description": "AIR BUS Convertor",
+      "channels": null
+    },
+    "32853": {
+      "db_id": 92,
+      "type_code": 32853,
+      "model": "PRJ-LFT-15K-130",
+      "description": "TIS Projector Lift",
+      "channels": null
+    },
+    "32855": {
+      "db_id": 93,
+      "type_code": 32855,
+      "model": "TIS-WS-71",
+      "description": "Weather Station Adaptor",
+      "channels": null
+    },
+    "32856": {
+      "db_id": 94,
+      "type_code": 32856,
+      "model": "IP-COM-PORT",
+      "description": "IP COM Port Gateway",
+      "channels": null
+    },
+    "32864": {
+      "db_id": 95,
+      "type_code": 32864,
+      "model": "MET-EN-1PH",
+      "description": "One Phase Energy Meter",
+      "channels": null
+    },
+    "32865": {
+      "db_id": 96,
+      "type_code": 32865,
+      "model": "TIS-KNX-PORT",
+      "description": "TIS & KNX Compatible Device",
+      "channels": null
+    },
+    "32866": {
+      "db_id": 97,
+      "type_code": 32866,
+      "model": "TIS-TRV-16CNV",
+      "description": "TIS TRV Controler 16CH",
+      "channels": null
+    },
+    "32868": {
+      "db_id": 98,
+      "type_code": 32868,
+      "model": "LUNA-IN-HOTEL-HRF",
+      "description": "Luna Hotel Indoor HRF Unit",
+      "channels": null
+    },
+    "32869": {
+      "db_id": 99,
+      "type_code": 32869,
+      "model": "LUNA-IN-HOTEL-3T3L-HRF",
+      "description": "Luna Hotel Indoor 3T3L HRF Unit",
+      "channels": null
+    },
+    "32870": {
+      "db_id": 100,
+      "type_code": 32870,
+      "model": "IO-IN-HOTEL-HRF",
+      "description": "IO Hotel Indoor 3B3L HRF Unit",
+      "channels": null
+    },
+    "32871": {
+      "db_id": 101,
+      "type_code": 32871,
+      "model": "LUNA-OUT-HOTEL-HRF",
+      "description": "Luna Hotel Outdoor 1T3L HRF Unit",
+      "channels": null
+    },
+    "32872": {
+      "db_id": 102,
+      "type_code": 32872,
+      "model": "LUNA-OUT-HOTEL",
+      "description": "Luna Hotel Outdoor 1T3L Unit",
+      "channels": null
+    },
+    "32873": {
+      "db_id": 103,
+      "type_code": 32873,
+      "model": "IO-OUT-HOTEL-HRF",
+      "description": "IO Hotel Outdoor 1B2L HRF Unit",
+      "channels": null
+    },
+    "32874": {
+      "db_id": 104,
+      "type_code": 32874,
+      "model": "IO-OUT-HOTEL",
+      "description": "IO Hotel Outdoor 1B2L Unit",
+      "channels": null
+    },
+    "32875": {
+      "db_id": 105,
+      "type_code": 32875,
+      "model": "TIS-MER-8G-PB",
+      "description": "TIS Mercury 8G Panel",
+      "channels": null
+    },
+    "32876": {
+      "db_id": 106,
+      "type_code": 32876,
+      "model": "TIS-MER-AC4G-PB",
+      "description": "TIS Mercury AC Panel With 4G",
+      "channels": null
+    },
+    "32877": {
+      "db_id": 107,
+      "type_code": 32877,
+      "model": "IO-IN-HOTEL-LRF",
+      "description": "IO Hotel Indoor 3B3L LRF Unit",
+      "channels": null
+    },
+    "32878": {
+      "db_id": 108,
+      "type_code": 32878,
+      "model": "IO-OUT-HOTEL-LRF",
+      "description": "IO Hotel Outdoor 1B2L LRF Unit",
+      "channels": null
+    },
+    "32879": {
+      "db_id": 109,
+      "type_code": 32879,
+      "model": "LUNA-IN-HOTEL-LRF",
+      "description": "Luna Hotel Indoor LRF Unit",
+      "channels": null
+    },
+    "32880": {
+      "db_id": 110,
+      "type_code": 32880,
+      "model": "LUNA-OUT-HOTEL-LRF",
+      "description": "Luna Hotel Outdoor 1T3L LRF Unit",
+      "channels": null
+    },
+    "32881": {
+      "db_id": 111,
+      "type_code": 32881,
+      "model": "LUNA-IN-HOTEL-3T3L-LRF",
+      "description": "Luna Hotel Indoor 3T3L LRF Unit",
+      "channels": null
+    },
+    "32890": {
+      "db_id": 112,
+      "type_code": 32890,
+      "model": "TIS-ZIG-PORT",
+      "description": "TIS Zigbee Home Automation Converter",
+      "channels": null
+    },
+    "32891": {
+      "db_id": 113,
+      "type_code": 32891,
+      "model": "TIS-AUD-SRV-4X-160W",
+      "description": "TIS Audio Server 4 ZONE",
+      "channels": null
+    },
+    "32892": {
+      "db_id": 114,
+      "type_code": 32892,
+      "model": "TIS-M7-CURTAIN",
+      "description": "Curtain Motor",
+      "channels": null
+    },
+    "32894": {
+      "db_id": 115,
+      "type_code": 32894,
+      "model": "VEN-2G-HC-BUS-B",
+      "description": "Venera Switch 2CH",
+      "channels": null
+    },
+    "32895": {
+      "db_id": 116,
+      "type_code": 32895,
+      "model": "VEN-3G-HC-BUS-B",
+      "description": "Venera Switch 3CH",
+      "channels": null
+    },
+    "32896": {
+      "db_id": 117,
+      "type_code": 32896,
+      "model": "VEN-4G-HC-BUS-B",
+      "description": "Venera Switch 4CH",
+      "channels": null
+    },
+    "32897": {
+      "db_id": 118,
+      "type_code": 32897,
+      "model": "VEN-AC-3R-1.5-OLED-BUS",
+      "description": "Venera Thermostat With 3 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32898": {
+      "db_id": 119,
+      "type_code": 32898,
+      "model": "VEN-AC-4R-1.5-OLED-BUS",
+      "description": "Venera Thermostat With 4 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32899": {
+      "db_id": 120,
+      "type_code": 32899,
+      "model": "VEN-AC-5R-1.5-OLED-BUS",
+      "description": "Venera Thermostat With 5 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32901": {
+      "db_id": 121,
+      "type_code": 32901,
+      "model": "VEN-AC-3R-1.5-OLED",
+      "description": "Venera Thermostat With 3 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32902": {
+      "db_id": 122,
+      "type_code": 32902,
+      "model": "VEN-AC-4R-1.5-OLED",
+      "description": "Venera Thermostat With 4 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32903": {
+      "db_id": 123,
+      "type_code": 32903,
+      "model": "VEN-AC-5R-1.5-OLED",
+      "description": "Venera Thermostat With 5 Relay 1.5 OLED",
+      "channels": null
+    },
+    "32905": {
+      "db_id": 124,
+      "type_code": 32905,
+      "model": "TIS-VRF-AC",
+      "description": "TIS VRV Gateway Support 32 Indoor Units",
+      "channels": null
+    },
+    "32907": {
+      "db_id": 125,
+      "type_code": 32907,
+      "model": "VEN-2G-HC-AIR-A",
+      "description": "Venera Switch 2CH",
+      "channels": null
+    },
+    "32908": {
+      "db_id": 126,
+      "type_code": 32908,
+      "model": "VEN-3G-HC-AIR-A",
+      "description": "Venera Switch 3CH",
+      "channels": null
+    },
+    "32909": {
+      "db_id": 127,
+      "type_code": 32909,
+      "model": "VEN-4G-HC-AIR-A",
+      "description": "Venera Switch 4CH",
+      "channels": null
+    },
+    "32911": {
+      "db_id": 128,
+      "type_code": 32911,
+      "model": "TIS-BEDSIDE-12G",
+      "description": "TIS Bedside 12 Gang With Temperature",
+      "channels": null
+    },
+    "32912": {
+      "db_id": 129,
+      "type_code": 32912,
+      "model": "TIS-BUS-CONVERTER",
+      "description": "TIS BUS-RS485-RS232 Converter",
+      "channels": null
+    },
+    "32913": {
+      "db_id": 130,
+      "type_code": 32913,
+      "model": "TIS-4CH-AIN",
+      "description": "TIS Analog 4ch Input",
+      "channels": null
+    },
+    "32914": {
+      "db_id": 131,
+      "type_code": 32914,
+      "model": "TIS-OUTDOOR-BELL",
+      "description": "TIS Outdoor Bell",
+      "channels": null
+    },
+    "32915": {
+      "db_id": 132,
+      "type_code": 32915,
+      "model": "TIS-SOL-3G",
+      "description": "Sol Switch 3CH",
+      "channels": null
+    },
+    "32916": {
+      "db_id": 133,
+      "type_code": 32916,
+      "model": "MER-IN-HOTEL-LRF",
+      "description": "Mercury Hotel Indoor LRF Unit",
+      "channels": null
+    },
+    "32917": {
+      "db_id": 134,
+      "type_code": 32917,
+      "model": "TER-2G",
+      "description": "Terre 2G",
+      "channels": null
+    },
+    "32918": {
+      "db_id": 135,
+      "type_code": 32918,
+      "model": "TIS-SOL-TFT",
+      "description": "TIS SOL TFT Pannel",
+      "channels": null
+    },
+    "32920": {
+      "db_id": 136,
+      "type_code": 32920,
+      "model": "MER-OUT-HOTEL-LRF",
+      "description": "Mercury Hotel Outdoor LRF Unit",
+      "channels": null
+    },
+    "32921": {
+      "db_id": 137,
+      "type_code": 32921,
+      "model": "TIS-GTY-1AC",
+      "description": "TIS VRV 1 AC",
+      "channels": null
+    },
+    "32922": {
+      "db_id": 138,
+      "type_code": 32922,
+      "model": "IO-OUT-HOTEL-HRF-809A",
+      "description": "IO Hotel Outdoor 1B2L HRF Unit",
+      "channels": null
+    },
+    "32923": {
+      "db_id": 139,
+      "type_code": 32923,
+      "model": "IO-OUT-HOTEL-809B",
+      "description": "IO Hotel Outdoor 1B2L Unit",
+      "channels": null
+    },
+    "32924": {
+      "db_id": 140,
+      "type_code": 32924,
+      "model": "LUNA-OUT-HOTEL-HRF-809C",
+      "description": "Luna Hotel Outdoor 1T3L HRF Unit",
+      "channels": null
+    },
+    "32925": {
+      "db_id": 141,
+      "type_code": 32925,
+      "model": "LUNA-OUT-HOTEL-809D",
+      "description": "Luna Hotel Outdoor 1T3L Unit",
+      "channels": null
+    },
+    "32926": {
+      "db_id": 142,
+      "type_code": 32926,
+      "model": "IO-IN-HOTEL-HRF-809E",
+      "description": "IO Hotel Indoor 3B3L HRF Unit",
+      "channels": null
+    },
+    "32929": {
+      "db_id": 143,
+      "type_code": 32929,
+      "model": "CLICK-1G-PANEL-BUS",
+      "description": "Click-Push Button",
+      "channels": null
+    },
+    "32930": {
+      "db_id": 144,
+      "type_code": 32930,
+      "model": "CLICK-2G-PANEL-BUS",
+      "description": "Click-Push Button",
+      "channels": null
+    },
+    "32931": {
+      "db_id": 145,
+      "type_code": 32931,
+      "model": "CLICK-3G-PANEL-BUS",
+      "description": "Click-Push Button",
+      "channels": null
+    },
+    "32932": {
+      "db_id": 146,
+      "type_code": 32932,
+      "model": "CLICK-4G-PANEL-BUS",
+      "description": "Click-Push Button",
+      "channels": null
+    },
+    "32934": {
+      "db_id": 147,
+      "type_code": 32934,
+      "model": "CLICK-6G-PANEL-BUS",
+      "description": "Click-Push Button",
+      "channels": null
+    },
+    "32935": {
+      "db_id": 148,
+      "type_code": 32935,
+      "model": "TIS-SEC-PRO",
+      "description": "SMS Security",
+      "channels": null
+    },
+    "32936": {
+      "db_id": 149,
+      "type_code": 32936,
+      "model": "TIS-CLICK-AC-BUS",
+      "description": "TIS Click Thermostat Bus",
+      "channels": null
+    },
+    "32937": {
+      "db_id": 150,
+      "type_code": 32937,
+      "model": "TIS-22DI-DIN",
+      "description": "22 Zone Dry Contact DIGITAL INPUT",
+      "channels": null
+    },
+    "32938": {
+      "db_id": 151,
+      "type_code": 32938,
+      "model": "MER-IN-HOTEL-HRF-80AA",
+      "description": "Hotel Indoor HRF Unit",
+      "channels": null
+    },
+    "32939": {
+      "db_id": 152,
+      "type_code": 32939,
+      "model": "TIS-4AI-010V",
+      "description": "TIS Analog 4ch Input Voltage",
+      "channels": null
+    },
+    "32940": {
+      "db_id": 153,
+      "type_code": 32940,
+      "model": "TIS-4AI-4-20MA",
+      "description": "TIS Analog 4ch Input Current",
+      "channels": null
+    },
+    "32941": {
+      "db_id": 154,
+      "type_code": 32941,
+      "model": "MER-OUT-HOTEL-HRF-80AD",
+      "description": "Hotel Outdoor 1T2L HRF Uint",
+      "channels": null
+    },
+    "32942": {
+      "db_id": 155,
+      "type_code": 32942,
+      "model": "TIS-HEALTH-CM-RADAR",
+      "description": "TIS Health Sensor Radar",
+      "channels": null
+    },
+    "32943": {
+      "db_id": 156,
+      "type_code": 32943,
+      "model": "TIS-ZIG-WF-GTY-V4",
+      "description": "TIS Zigbee Wifi Gateway",
+      "channels": null
+    },
+    "32944": {
+      "db_id": 157,
+      "type_code": 32944,
+      "model": "TIS-OS-MMV2-IC",
+      "description": "TIS Radar Sensor",
+      "channels": null
+    },
+    "32945": {
+      "db_id": 158,
+      "type_code": 32945,
+      "model": "TIS-ERO-1G",
+      "description": "Europa-Push Button",
+      "channels": null
+    },
+    "32946": {
+      "db_id": 159,
+      "type_code": 32946,
+      "model": "TIS-ERO-2G",
+      "description": "Europa-Push Button",
+      "channels": null
+    },
+    "32947": {
+      "db_id": 160,
+      "type_code": 32947,
+      "model": "TIS-ERO-3G",
+      "description": "Europa-Push Button",
+      "channels": null
+    },
+    "32948": {
+      "db_id": 161,
+      "type_code": 32948,
+      "model": "TIS-ERO-4G",
+      "description": "Europa-Push Button",
+      "channels": null
+    },
+    "32949": {
+      "db_id": 162,
+      "type_code": 32949,
+      "model": "TIS-ZIG-WF-GTY-V5",
+      "description": "TIS Zigbee Wifi Gateway",
+      "channels": null
+    },
+    "32950": {
+      "db_id": 163,
+      "type_code": 32950,
+      "model": "TIS-ERO-6G",
+      "description": "Europa-Push Button",
+      "channels": null
+    },
+    "32951": {
+      "db_id": 164,
+      "type_code": 32951,
+      "model": "TIS-CLICK-AC-FH-BUS",
+      "description": "TIS Click Thermostat Bus",
+      "channels": null
+    },
+    "32952": {
+      "db_id": 165,
+      "type_code": 32952,
+      "model": "TIS-C-BUS-CONVERTER",
+      "description": "TIS C-BUS-RS232 Converter",
+      "channels": null
+    },
+    "32953": {
+      "db_id": 166,
+      "type_code": 32953,
+      "model": "TIS-FAN-4CH",
+      "description": "Fan Control 4CH LMH",
+      "channels": null
+    },
+    "32954": {
+      "db_id": 167,
+      "type_code": 32954,
+      "model": "TIS-OS-MMV2-IRE",
+      "description": "TIS Radar Sensor With IRE",
+      "channels": null
+    },
+    "32962": {
+      "db_id": 168,
+      "type_code": 32962,
+      "model": "TIS-SIR-2G",
+      "description": "Sirius Push Button",
+      "channels": null
+    },
+    "32964": {
+      "db_id": 169,
+      "type_code": 32964,
+      "model": "TIS-SIR-4G",
+      "description": "Sirius Push Button",
+      "channels": null
+    },
+    "32966": {
+      "db_id": 170,
+      "type_code": 32966,
+      "model": "TIS-SIR-6G",
+      "description": "Sirius Push Button",
+      "channels": null
+    },
+    "32968": {
+      "db_id": 171,
+      "type_code": 32968,
+      "model": "TIS-SIR-8G",
+      "description": "Sirius Push Button",
+      "channels": null
+    },
+    "32976": {
+      "db_id": 172,
+      "type_code": 32976,
+      "model": "TARIQ-10G6R5Z1F",
+      "description": "TIS TARIQ 10Gang 6Relay 5Zone 1Fan",
+      "channels": null
+    },
+    "32977": {
+      "db_id": 173,
+      "type_code": 32977,
+      "model": "TARIQ-10G3R5Z1F1DA",
+      "description": "TIS TARIQ 10Gang 3Relay 5Zone 1Fan 1Dali",
+      "channels": null
+    },
+    "32978": {
+      "db_id": 174,
+      "type_code": 32978,
+      "model": "TARIQ-10G3R5Z2D1F",
+      "description": "TIS TARIQ 10Gang 3Relay 5Zone 2Dim 1Fan",
+      "channels": null
+    },
+    "33040": {
+      "db_id": 175,
+      "type_code": 33040,
+      "model": "TIS-TM-120",
+      "description": "TIS Roller Motor",
+      "channels": null
+    },
+    "33056": {
+      "db_id": 176,
+      "type_code": 33056,
+      "model": "DIM-TE-8CH-1A",
+      "description": "TE Dimmer 8CH 1A",
+      "channels": 8
+    },
+    "33057": {
+      "db_id": 177,
+      "type_code": 33057,
+      "model": "TIS-MER-AC-TFT-2G",
+      "description": "TIS Mercury AC Panel With 2G",
+      "channels": null
+    },
+    "33062": {
+      "db_id": 178,
+      "type_code": 33062,
+      "model": "TIS-PANEL-2G",
+      "description": "Panel Push Button",
+      "channels": null
+    },
+    "33064": {
+      "db_id": 179,
+      "type_code": 33064,
+      "model": "TIS-PANEL-4G",
+      "description": "Panel Push Button",
+      "channels": null
+    },
+    "33065": {
+      "db_id": 180,
+      "type_code": 33065,
+      "model": "TIS-PANEL-8G",
+      "description": "Panel Push Button",
+      "channels": null
+    },
+    "33066": {
+      "db_id": 181,
+      "type_code": 33066,
+      "model": "ZIG-VEN-AC-3R-HC",
+      "description": "Zigbee Venera Thermostat With 3 Relay",
+      "channels": null
+    },
+    "33067": {
+      "db_id": 182,
+      "type_code": 33067,
+      "model": "ZIG-VEN-AC-4R-HC",
+      "description": "Zigbee Venera Thermostat With 4 Relay",
+      "channels": null
+    },
+    "33068": {
+      "db_id": 183,
+      "type_code": 33068,
+      "model": "ZIG-VEN-AC-5R-LC",
+      "description": "Zigbee Venera Thermostat With 5 Relay",
+      "channels": null
+    },
+    "33069": {
+      "db_id": 184,
+      "type_code": 33069,
+      "model": "MINI-ZIG-AUTO-IRE-T",
+      "description": "Mini Zigbee Emitter With Auto Infrared",
+      "channels": null
+    },
+    "33071": {
+      "db_id": 185,
+      "type_code": 33071,
+      "model": "TIS-ZIG-OS-MMV2-IRE",
+      "description": "TIS Zigbee Radar Sensor With IRE",
+      "channels": null
+    },
+    "33073": {
+      "db_id": 186,
+      "type_code": 33073,
+      "model": "TIS-ZIG-VEN-4G-IRE",
+      "description": "TIS Zigbee Venera 4G With IRE",
+      "channels": null
+    },
+    "33076": {
+      "db_id": 187,
+      "type_code": 33076,
+      "model": "TIS-ZIG-HEALTH-CM",
+      "description": "TIS Zigbee Health Sensor",
+      "channels": null
+    },
+    "33078": {
+      "db_id": 188,
+      "type_code": 33078,
+      "model": "TIS-ZIG-BUS-CONVERTER",
+      "description": "TIS Zigbee BUS-RS485-RS232 Converter",
+      "channels": null
+    },
+    "52403": {
+      "db_id": 189,
+      "type_code": 52403,
+      "model": "TIS-SAT-PAD",
+      "description": "TIS Saturn 133,101 And 80 Panel",
+      "channels": null
+    },
+    "52404": {
+      "db_id": 190,
+      "type_code": 52404,
+      "model": "TIS-SAT57",
+      "description": "TIS Saturn 57 Panel",
+      "channels": null
+    },
+    "52405": {
+      "db_id": 191,
+      "type_code": 52405,
+      "model": "TIS-SAT40",
+      "description": "TIS Saturn 40 Panel",
+      "channels": null
+    }
+  },
+  "channel_configurations": {
+    "32": {
+      "type_code": 32,
+      "model": "TIS-DMX-48",
+      "channel_count": 48
+    },
+    "424": {
+      "type_code": 424,
+      "model": "RLY-4CH-10A",
+      "channel_count": 4
+    },
+    "426": {
+      "type_code": 426,
+      "model": "VLC-6CH-3A",
+      "channel_count": 6
+    },
+    "428": {
+      "type_code": 428,
+      "model": "RLY-8CH-16A",
+      "channel_count": 8
+    },
+    "440": {
+      "type_code": 440,
+      "model": "VLC-12CH-10A",
+      "channel_count": 12
+    },
+    "600": {
+      "type_code": 600,
+      "model": "DIM-6CH-2A",
+      "channel_count": 6
+    },
+    "601": {
+      "type_code": 601,
+      "model": "DIM-4CH-3A",
+      "channel_count": 4
+    },
+    "602": {
+      "type_code": 602,
+      "model": "DIM-2CH-6A",
+      "channel_count": 2
+    },
+    "7080": {
+      "type_code": 7080,
+      "model": "DALI-64",
+      "channel_count": 64
+    },
+    "7081": {
+      "type_code": 7081,
+      "model": "DALI-PRO-64",
+      "channel_count": 64
+    },
+    "7090": {
+      "type_code": 7090,
+      "model": "TIS-DIM-4CH-1A",
+      "channel_count": 4
+    },
+    "7092": {
+      "type_code": 7092,
+      "model": "DIM-TE-2CH-3A",
+      "channel_count": 2
+    },
+    "7094": {
+      "type_code": 7094,
+      "model": "DIM-TE-4CH-1.5A",
+      "channel_count": 4
+    },
+    "7098": {
+      "type_code": 7098,
+      "model": "RCU-8OUT-8IN",
+      "channel_count": 8
+    },
+    "7099": {
+      "type_code": 7099,
+      "model": "RLY-6CH-0-10V",
+      "channel_count": 6
+    },
+    "32798": {
+      "type_code": 32798,
+      "model": "ADS-BUS-1D",
+      "channel_count": 1
+    },
+    "32811": {
+      "type_code": 32811,
+      "model": "RCU-24R20Z",
+      "channel_count": 24
+    },
+    "32813": {
+      "type_code": 32813,
+      "model": "RCU-20R20Z-IP",
+      "channel_count": 20
+    },
+    "32816": {
+      "type_code": 32816,
+      "model": "DIM-W06CH10A-TE",
+      "channel_count": 6
+    },
+    "32817": {
+      "type_code": 32817,
+      "model": "DIM-W12CH10A-TE",
+      "channel_count": 12
+    },
+    "32827": {
+      "type_code": 32827,
+      "model": "ADS-3R-BUS",
+      "channel_count": 3
+    },
+    "32832": {
+      "type_code": 32832,
+      "model": "ADS-1D-1Z",
+      "channel_count": 1
+    },
+    "32833": {
+      "type_code": 32833,
+      "model": "ADS-2R-2Z",
+      "channel_count": 2
+    },
+    "32835": {
+      "type_code": 32835,
+      "model": "VEN-4S-4R-HC",
+      "channel_count": 4
+    },
+    "32844": {
+      "type_code": 32844,
+      "model": "VEN-2S-2R-HC",
+      "channel_count": 2
+    },
+    "32846": {
+      "type_code": 32846,
+      "model": "ADS-4CH-0-10V",
+      "channel_count": 4
+    },
+    "32847": {
+      "type_code": 32847,
+      "model": "ADS-3R-3Z",
+      "channel_count": 3
+    },
+    "32849": {
+      "type_code": 32849,
+      "model": "AIR-SOCKET-S",
+      "channel_count": 1
+    },
+    "32850": {
+      "type_code": 32850,
+      "model": "VEN-1D-UV",
+      "channel_count": 1
+    },
+    "32851": {
+      "type_code": 32851,
+      "model": "VEN-3S-3R-HC",
+      "channel_count": 3
+    },
+    "33056": {
+      "type_code": 33056,
+      "model": "DIM-TE-8CH-1A",
+      "channel_count": 8
+    }
+  },
+  "protocol_opcodes": {
+    "discovered": {
+      "0x0031": "Channel control command (single channel)",
+      "0x0032": "Channel feedback/status (single channel)",
+      "0x0033": "Multi-channel status query (request all 24 channels)",
+      "0x0034": "Multi-channel status response (24 bytes, one per channel)",
+      "0xF00E": "Channel name query (request with channel number)",
+      "0xF00F": "Channel name response (UTF-8 text, max 20 bytes)",
+      "0xEFFD": "Device info query",
+      "0xEFFE": "Device info response",
+      "0xF00A": "Unknown function query",
+      "0xF00B": "Unknown function response",
+      "0xF012": "Unknown function query",
+      "0xF013": "Unknown function response"
+    },
+    "packet_structure": {
+      "header": "SMARTCLOUD (10 bytes)",
+      "tis_packet": {
+        "src_subnet": "1 byte",
+        "src_device": "1 byte",
+        "src_type": "2 bytes",
+        "tgt_subnet": "1 byte",
+        "tgt_device": "1 byte",
+        "op_code": "2 bytes",
+        "additional_data_length": "1 byte",
+        "additional_data": "variable"
+      }
+    },
+    "brightness_encoding": {
+      "range": "0-248",
+      "conversion": "brightness_pct = (raw_value / 248.0) * 100",
+      "note": "0 = OFF, 1-248 = ON with brightness level"
+    }
+  },
+  "rooms": [
+    {
+      "room_id": 1,
+      "display_type": 0,
+      "icon_name": "room_1",
+      "room_name": "Living Room"
+    },
+    {
+      "room_id": 2,
+      "display_type": 0,
+      "icon_name": "room_2",
+      "room_name": "Kitchen"
+    },
+    {
+      "room_id": 3,
+      "display_type": 0,
+      "icon_name": "room_3",
+      "room_name": "Master Room"
+    },
+    {
+      "room_id": 4,
+      "display_type": 0,
+      "icon_name": "room_4",
+      "room_name": "Kids Room"
+    },
+    {
+      "room_id": 5,
+      "display_type": 0,
+      "icon_name": "room_5",
+      "room_name": "Bath Room"
+    },
+    {
+      "room_id": 0,
+      "display_type": 0,
+      "icon_name": "room_1",
+      "room_name": "homepage"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_id": 1,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 1,
+      "scene_remark": "Scene-01",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 2,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 2,
+      "scene_remark": "Scene-02",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 3,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 3,
+      "scene_remark": "Scene-03",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 4,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 4,
+      "scene_remark": "Scene-04",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 5,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 5,
+      "scene_remark": "Scene-05",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 6,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 6,
+      "scene_remark": "Scene-06",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 7,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 7,
+      "scene_remark": "Scene-07",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 8,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 8,
+      "scene_remark": "Scene-08",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 9,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 9,
+      "scene_remark": "Scene-09",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 10,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 10,
+      "scene_remark": "Scene-10",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 11,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 11,
+      "scene_remark": "Scene-11",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 12,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 12,
+      "scene_remark": "Scene-12",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 13,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 13,
+      "scene_remark": "Scene-13",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 14,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 14,
+      "scene_remark": "Scene-14",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 15,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 15,
+      "scene_remark": "Scene-15",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 16,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 16,
+      "scene_remark": "Scene-16",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 17,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 17,
+      "scene_remark": "Scene-17",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 18,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 18,
+      "scene_remark": "Scene-18",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 19,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 19,
+      "scene_remark": "Scene-19",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 20,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 20,
+      "scene_remark": "Scene-20",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 21,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 21,
+      "scene_remark": "Scene-21",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 22,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 22,
+      "scene_remark": "Scene-22",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 23,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 23,
+      "scene_remark": "Scene-23",
+      "scene_type": 0
+    },
+    {
+      "scene_id": 24,
+      "subnet_id": 210,
+      "device_id": 210,
+      "area_no": 1,
+      "scene_no": 24,
+      "scene_remark": "Scene-24",
+      "scene_type": 0
+    }
+  ],
+  "important_device_types": {
+    "186": "Gateway/Bridge",
+    "214": "RCU-24R20Z (24 channel relay - OLD TYPE CODE)",
+    "32811": "RCU-24R20Z (24 channel relay - CURRENT TYPE CODE)",
+    "32813": "RCU-20R20Z-IP (20 channel relay with IP)",
+    "7098": "RCU-8OUT-8IN (8 output 8 input room controller)",
+    "424": "RLY-4CH-10A (4 channel 10A relay)",
+    "428": "RLY-8CH-16A (8 channel 16A relay)",
+    "440": "VLC-12CH-10A (12 channel valve/lighting controller)",
+    "600": "DIM-6CH-2A (6 channel 2A dimmer)",
+    "601": "DIM-4CH-3A (4 channel 3A dimmer)",
+    "602": "DIM-2CH-6A (2 channel 6A dimmer)",
+    "7040": "MRS-4G (MARS 4 button panel)",
+    "7050": "MRS-8G (MARS 8 button panel)",
+    "7060": "MRS-12G (MARS 12 button panel)",
+    "7080": "DALI-64 (64 channel DALI controller)",
+    "7081": "DALI-PRO-64 (64 channel DALI PRO controller)"
+  }
+}
