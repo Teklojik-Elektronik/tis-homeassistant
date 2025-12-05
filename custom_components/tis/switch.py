@@ -1,6 +1,7 @@
 """Support for TIS switches - Reads from Addon devices.json."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -119,8 +120,17 @@ class TISSwitch(SwitchEntity):
         
         _LOGGER.debug(f"Registered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
         
-        # Request initial state from device
+        # Request initial state and channel name from device
         await self._request_state()
+        
+        # Retry channel name request after 2 seconds if not received
+        async def retry_channel_name():
+            await asyncio.sleep(2)
+            if self._channel_name is None:
+                _LOGGER.info(f"Retrying channel name request for {self._subnet}.{self._device_id} CH{self._channel}")
+                await self._request_channel_name_only()
+        
+        self.hass.async_create_task(retry_channel_name())
     
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
@@ -177,6 +187,36 @@ class TISSwitch(SwitchEntity):
             _LOGGER.debug(f"Requested state and name from {self._subnet}.{self._device_id} CH{self._channel}")
         except Exception as e:
             _LOGGER.error(f"Failed to request state: {e}")
+    
+    async def _request_channel_name_only(self) -> None:
+        """Request only channel name from device (for retry)."""
+        try:
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect(bind=False)
+            
+            from .discovery import get_local_ip
+            local_ip = get_local_ip()
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
+            # Request channel name (OpCode 0xF00E)
+            packet = TISPacket()
+            packet.src_subnet = 1
+            packet.src_device = 254
+            packet.src_type = 0xFFFE
+            packet.tgt_subnet = self._subnet
+            packet.tgt_device = self._device_id
+            packet.op_code = 0xF00E  # Channel name query
+            packet.additional_data = bytes([self._channel])
+            
+            tis_data = packet.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+            client.send_to(full_packet, self._gateway_ip)
+            
+            client.close()
+            
+            _LOGGER.debug(f"Retry: Requested channel name from {self._subnet}.{self._device_id} CH{self._channel}")
+        except Exception as e:
+            _LOGGER.error(f"Failed to request channel name: {e}")
     
     async def _handle_feedback(self, is_on: bool, brightness: int):
         """Handle feedback from UDP listener."""
