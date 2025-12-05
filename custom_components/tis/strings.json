@@ -14,7 +14,7 @@
     "step": {
       "init": {
         "title": "TIS Ayarları",
-        "description": "TIS cihazları TIS Addon web arayüzünden yönetilir.\n\nEntity'leri silmek için:\n1. Cihaz sayfasını açın\n2. Silmek istediğiniz entity'yi seçin\n3. Sağ üst köşedeki ⚙️ simgesine tıklayın\n4. 'Entity'yi Sil' seçeneğini kullanın"
+        "description": "TIS cihazları yönetimi:\n\n📱 Yeni cihaz eklemek için: TIS Addon web arayüzünü kullanın (http://homeassistant.local:8888)\n\n🗑️ Cihaz silmek için:\n1. Cihaz sayfasını açın\n2. Sağ üst köşedeki ⋮ (üç nokta) menüsüne tıklayın\n3. 'Cihazı Sil' butonuna tıklayın\n4. Cihaz ve tüm kanalları silinecektir"
       }
     }
   },
