@@ -22,7 +22,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
         
         return self.async_create_entry(
-            title="TIS Akıllı Ev Sistemi",
+            title="TIS Akilli Ev Sistemi",
             data={"configured": True},
         )
 
