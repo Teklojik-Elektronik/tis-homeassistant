@@ -7,10 +7,14 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_SUBNET, CONF_DEVICE
+from .api import TISDevice
+from .discovery import discover_tis_devices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,6 +23,10 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for TIS Control."""
 
     VERSION = 1
+
+    def __init__(self):
+        """Initialize."""
+        self._discovered_devices = {}
 
     @staticmethod
     @callback
@@ -30,28 +38,18 @@ class TISConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle initial step - create entry and redirect to web UI."""
-        # Check if already configured
-        if self._async_current_entries():
+        if user_input is not None or self._async_current_entries():
+            # Already configured or user confirmed
             return self.async_abort(reason="already_configured")
-        
-        if user_input is not None:
-            # User confirmed, create entry
-            return self.async_create_entry(
-                title="TIS Akıllı Ev Sistemi",
-                data={
-                    "configured": True,
-                    "gateway_ip": "192.168.1.200",
-                    "udp_port": 6000,
-                },
-            )
-        
-        # Show confirmation form
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({}),
-            description_placeholders={
-                "info": "TIS Akıllı Ev Sistemi entegrasyonu yüklenecek. Cihazları TIS Addon web arayüzünden ekleyebilirsiniz."
-            }
+
+        # Create a single entry for TIS system (no per-device config)
+        return self.async_create_entry(
+            title="TIS Akıllı Ev Sistemi",
+            data={
+                "configured": True,
+                "gateway_ip": "192.168.1.200",
+                "udp_port": 6000,
+            },
         )
 
     async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
