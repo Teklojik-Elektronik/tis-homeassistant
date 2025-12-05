@@ -118,6 +118,18 @@ class TISSwitch(SwitchEntity):
         # Request initial state from device
         await self._request_state()
     
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity will be removed from hass."""
+        entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+        callback_key = (self._subnet, self._device_id, self._channel)
+        
+        # Unregister callbacks
+        entry_data["update_callbacks"].pop(callback_key, None)
+        if "name_callbacks" in entry_data:
+            entry_data["name_callbacks"].pop(callback_key, None)
+        
+        _LOGGER.debug(f"Unregistered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
+    
     async def _request_state(self) -> None:
         """Request current state and channel name from device."""
         try:
@@ -172,9 +184,20 @@ class TISSwitch(SwitchEntity):
     async def _handle_channel_name(self, name: str):
         """Handle channel name from UDP listener."""
         self._channel_name = name
+        
+        # Update entity name if channel name is not "Bilinmiyor" (Unknown)
+        if name and name != "Bilinmiyor":
+            device_base = self._attr_name.split(' CH')[0] if ' CH' in self._attr_name else self._attr_name
+            self._attr_name = f"{device_base} {name}"
+            _LOGGER.info(f"Updated entity name to: {self._attr_name}")
+        
         self.async_write_ha_state()
-        _LOGGER.info(f"Updated {self._attr_name}: channel_name='{name}'")
 
+    @property
+    def name(self) -> str:
+        """Return the name of the switch."""
+        return self._attr_name
+    
     @property
     def is_on(self) -> bool:
         """Return true if switch is on."""
