@@ -1,0 +1,7 @@
+custom_components/tis/__pycache__/
+custom_components/tis/*.pyc
+.vscode/
+.idea/
+*.log
+*.bak
+.DS_Store

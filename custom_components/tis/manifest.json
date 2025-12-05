@@ -1,0 +1,13 @@
+{
+  "domain": "tis",
+  "name": "TIS Control",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/yourusername/tis_homeassistant",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [
+    "ruamel.yaml"
+  ],
+  "version": "1.0.0"
+}

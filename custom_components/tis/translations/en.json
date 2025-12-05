@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TIS Control Setup",
+        "description": "Choose setup method:",
+        "menu_options": {
+          "manual": "Manual Setup",
+          "discovery": "Auto Discovery"
+        }
+      },
+      "manual": {
+        "title": "Manual Setup",
+        "description": "Enter TIS device IP and details",
+        "data": {
+          "host": "IP Address",
+          "subnet": "Subnet ID",
+          "device": "Device ID"
+        }
+      },
+      "discovery": {
+        "title": "Device Selection",
+        "description": "Select a discovered TIS device:",
+        "data": {
+          "device": "Device"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check IP and network.",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device already configured",
+      "no_devices_found": "No TIS devices found on network."
+    }
+  }
+}
