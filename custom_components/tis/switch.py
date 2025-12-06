@@ -85,13 +85,19 @@ async def async_setup_entry(
         channels = device_data.get("channels", 1)
         device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
         channel_names = device_data.get("channel_names", {})  # Get channel names from JSON
+        initial_states = device_data.get("initial_states", {})  # Get initial states
         
         _LOGGER.debug(f"Device {unique_id} has {len(channel_names)} channel names in JSON")
+        _LOGGER.info(f"🔍 DEBUG channel_names dict: {channel_names}")
         
         # Create switch entity for each channel
         for channel in range(1, channels + 1):  # Channels start from 1
             # Get pre-defined channel name from JSON (if available)
             predefined_name = channel_names.get(str(channel))
+            _LOGGER.debug(f"  CH{channel}: predefined_name={predefined_name}")
+            
+            # Get initial state for this channel
+            initial_state = initial_states.get(str(channel))
             
             entities.append(
                 TISSwitch(
@@ -105,7 +111,8 @@ async def async_setup_entry(
                     channel,
                     gateway_ip,
                     udp_port,
-                    predefined_name  # Pass channel name from JSON
+                    predefined_name,  # Pass channel name from JSON
+                    initial_state  # Pass initial state
                 )
             )
     
@@ -136,7 +143,8 @@ class TISSwitch(SwitchEntity):
         channel: int,
         gateway_ip: str,
         udp_port: int,
-        predefined_name: str = None
+        predefined_name: str = None,
+        initial_state: dict = None
     ) -> None:
         """Initialize the switch."""
         self.hass = hass
@@ -146,8 +154,16 @@ class TISSwitch(SwitchEntity):
         self._channel = channel
         self._gateway_ip = gateway_ip
         self._udp_port = udp_port
-        self._is_on = False
-        self._brightness = 0
+        
+        # Set initial state from JSON if available
+        if initial_state:
+            self._is_on = initial_state.get('is_on', False)
+            self._brightness = initial_state.get('brightness', 0)
+            _LOGGER.info(f"💾 CH{channel} loaded initial state: ON={self._is_on}, brightness={self._brightness}%")
+        else:
+            self._is_on = False
+            self._brightness = 0
+        
         self._channel_name = predefined_name  # Use predefined name from JSON
         self._device_name = device_name
         
