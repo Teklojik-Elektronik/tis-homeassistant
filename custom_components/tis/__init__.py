@@ -108,7 +108,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         # Handle feedback packet (OpCode 0x0032)
                         if parsed['op_code'] == 0x0032:
                             if len(parsed['additional_data']) >= 3:
-                                channel = parsed['additional_data'][0]
+                                # Protocol: data[0]=channel(0-23), data[1]=0xF8, data[2]=brightness(0-248)
+                                channel_index = parsed['additional_data'][0]  # 0-23
+                                channel = channel_index + 1  # Convert to 1-24 for switch entities
                                 brightness_raw = parsed['additional_data'][2]
                                 
                                 # TIS uses 0-248 scale for 0-100%
@@ -129,8 +131,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             if len(parsed['additional_data']) >= 24:
                                 _LOGGER.debug(f"Multi-channel status from {src_subnet}.{src_device}")
                                 
+                                # Protocol: data[0-23] contains brightness for channels 1-24
                                 for channel in range(1, 25):  # Channels 1-24
-                                    brightness_raw = parsed['additional_data'][channel - 1]
+                                    channel_index = channel - 1  # Array index 0-23
+                                    brightness_raw = parsed['additional_data'][channel_index]
                                     brightness = int((brightness_raw / 248.0) * 100)
                                     is_on = brightness_raw > 0
                                     

@@ -34,6 +34,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle initial step - get gateway IP and port."""
+        # Check if already configured
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
+        
         errors = {}
         
         if user_input is not None:
