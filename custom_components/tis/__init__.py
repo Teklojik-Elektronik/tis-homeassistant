@@ -168,7 +168,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 
                 except BlockingIOError:
                     # No UDP data available, poll device states instead
-                    await asyncio.sleep(3)  # Poll every 3 seconds
+                    await asyncio.sleep(5)  # Poll every 5 seconds (reduced from 3)
                     
                     # Query all devices for state updates
                     for device_key, device_data in entry_data["devices"].items():

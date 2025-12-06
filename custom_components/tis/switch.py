@@ -325,10 +325,12 @@ class TISSwitch(SwitchEntity):
             packet.tgt_device = self._device_id
             packet.op_code = 0x0031  # Control command
             
-            # Additional data: [channel, brightness (0-248), 0, 0]
+            # Additional data: [channel_index, brightness (0-248), 0, 0]
+            # Protocol uses 0-23 indexing, but entities use 1-24
+            channel_index = self._channel - 1  # Convert 1-24 to 0-23
             # For ON: brightness=248 (100%), for OFF: brightness=0
             brightness = 248 if state else 0
-            packet.additional_data = bytes([self._channel, brightness, 0, 0])
+            packet.additional_data = bytes([channel_index, brightness, 0, 0])
             
             tis_data = packet.build()
             
@@ -342,7 +344,8 @@ class TISSwitch(SwitchEntity):
             client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.info(f"Sent command to {self._subnet}.{self._device_id} CH{self._channel}: {'ON' if state else 'OFF'}")
+            _LOGGER.info(f"💡 Command sent: {self._subnet}.{self._device_id} CH{self._channel} ({self.name}) → "
+                        f"{'ON' if state else 'OFF'} (index={channel_index}, brightness={brightness})")
             
         except Exception as e:
             _LOGGER.error(f"Failed to send command: {e}", exc_info=True)
