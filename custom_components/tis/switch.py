@@ -163,8 +163,15 @@ class TISSwitch(SwitchEntity):
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect(bind=False)
             
-            from .discovery import get_local_ip
-            local_ip = get_local_ip()
+            # Get local IP for SMARTCLOUD header
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
             ip_bytes = bytes([int(x) for x in local_ip.split('.')])
             
             # Request 1: Multi-channel status (OpCode 0x0033)
@@ -207,8 +214,15 @@ class TISSwitch(SwitchEntity):
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect(bind=False)
             
-            from .discovery import get_local_ip
-            local_ip = get_local_ip()
+            # Get local IP for SMARTCLOUD header
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
             ip_bytes = bytes([int(x) for x in local_ip.split('.')])
             
             # Request channel name (OpCode 0xF00E)
