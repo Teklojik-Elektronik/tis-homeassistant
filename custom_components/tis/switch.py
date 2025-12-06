@@ -346,6 +346,10 @@ class TISSwitch(SwitchEntity):
             channel_index = self._channel - 1  # Convert 1-24 to 0-23
             # For ON: brightness=248 (100%), for OFF: brightness=0
             brightness = 248 if state else 0
+            
+            # DEBUG: Log the actual bytes being sent
+            _LOGGER.warning(f"🔍 DEBUG CH{self._channel}: self._channel={self._channel}, channel_index={channel_index}, brightness={brightness}")
+            
             packet.additional_data = bytes([channel_index, brightness, 0, 0])
             
             tis_data = packet.build()
