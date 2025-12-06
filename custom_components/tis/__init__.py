@@ -129,9 +129,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         # Handle multi-channel status (OpCode 0x0034)
                         elif parsed['op_code'] == 0x0034:
                             if len(parsed['additional_data']) >= 24:
-                                _LOGGER.debug(f"Multi-channel status from {src_subnet}.{src_device}")
+                                _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device} (Initial state sync)")
                                 
                                 # Protocol: data[0-23] contains brightness for channels 1-24
+                                updated_count = 0
                                 for channel in range(1, 25):  # Channels 1-24
                                     channel_index = channel - 1  # Array index 0-23
                                     brightness_raw = parsed['additional_data'][channel_index]
@@ -142,6 +143,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                     if callback_key in entry_data["update_callbacks"]:
                                         callback = entry_data["update_callbacks"][callback_key]
                                         await callback(is_on, brightness)
+                                        updated_count += 1
+                                        if is_on:
+                                            _LOGGER.debug(f"  CH{channel}: ON ({brightness}%)")
+                                
+                                _LOGGER.info(f"Updated {updated_count} channels for {src_subnet}.{src_device}")
                 
                 except BlockingIOError:
                     await asyncio.sleep(0.1)

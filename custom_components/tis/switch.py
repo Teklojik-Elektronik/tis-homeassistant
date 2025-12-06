@@ -16,6 +16,54 @@ from .tis_protocol import TISUDPClient, TISPacket
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _query_device_initial_state(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    gateway_ip: str,
+    udp_port: int,
+    subnet: int,
+    device_id: int,
+) -> None:
+    """Query all channel states for a device using OpCode 0x0033."""
+    try:
+        # Wait 1 second for entities to register their callbacks
+        await asyncio.sleep(1)
+        
+        client = TISUDPClient(gateway_ip, udp_port)
+        await client.async_connect(bind=False)
+        
+        # Get local IP for SMARTCLOUD header
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 80))
+            local_ip = s.getsockname()[0]
+        finally:
+            s.close()
+        
+        ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+        
+        # Query multi-channel status (OpCode 0x0033 -> response 0x0034)
+        packet = TISPacket()
+        packet.src_subnet = 1
+        packet.src_device = 254
+        packet.src_type = 0xFFFE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device_id
+        packet.op_code = 0x0033  # Multi-channel status query
+        packet.additional_data = bytes([])
+        
+        tis_data = packet.build()
+        full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+        client.send_to(full_packet, gateway_ip)
+        
+        client.close()
+        
+        _LOGGER.info(f"Queried initial state for device {subnet}.{device_id}")
+    except Exception as e:
+        _LOGGER.error(f"Failed to query initial state for {subnet}.{device_id}: {e}")
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -63,6 +111,14 @@ async def async_setup_entry(
     
     async_add_entities(entities)
     _LOGGER.info(f"Added {len(entities)} TIS switch entities")
+    
+    # Query initial states for all devices (one query per device)
+    for unique_id, device_data in devices.items():
+        subnet = device_data.get("subnet")
+        device_id = device_data.get("device_id")
+        hass.async_create_task(
+            _query_device_initial_state(hass, entry, gateway_ip, udp_port, subnet, device_id)
+        )
 
 
 class TISSwitch(SwitchEntity):
@@ -133,17 +189,19 @@ class TISSwitch(SwitchEntity):
         
         _LOGGER.debug(f"Registered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
         
-        # Request initial state and channel name from device
-        await self._request_state()
-        
-        # Retry channel name request after 2 seconds if not received
-        async def retry_channel_name():
-            await asyncio.sleep(2)
-            if self._channel_name is None:
-                _LOGGER.info(f"Retrying channel name request for {self._subnet}.{self._device_id} CH{self._channel}")
-                await self._request_channel_name_only()
-        
-        self.hass.async_create_task(retry_channel_name())
+        # Initial state will be queried once per device by async_setup_entry
+        # Here we only request channel name if not already in JSON
+        if not self._channel_name:
+            await self._request_channel_name_only()
+            
+            # Retry channel name request after 2 seconds if still not received
+            async def retry_channel_name():
+                await asyncio.sleep(2)
+                if self._channel_name is None:
+                    _LOGGER.info(f"Retrying channel name request for {self._subnet}.{self._device_id} CH{self._channel}")
+                    await self._request_channel_name_only()
+            
+            self.hass.async_create_task(retry_channel_name())
     
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
@@ -156,57 +214,6 @@ class TISSwitch(SwitchEntity):
             entry_data["name_callbacks"].pop(callback_key, None)
         
         _LOGGER.debug(f"Unregistered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
-    
-    async def _request_state(self) -> None:
-        """Request current state and channel name from device."""
-        try:
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect(bind=False)
-            
-            # Get local IP for SMARTCLOUD header
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
-            
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            
-            # Request 1: Multi-channel status (OpCode 0x0033)
-            packet1 = TISPacket()
-            packet1.src_subnet = 1
-            packet1.src_device = 254
-            packet1.src_type = 0xFFFE
-            packet1.tgt_subnet = self._subnet
-            packet1.tgt_device = self._device_id
-            packet1.op_code = 0x0033  # Multi-channel status query
-            packet1.additional_data = bytes([])
-            
-            tis_data1 = packet1.build()
-            full_packet1 = ip_bytes + b'SMARTCLOUD' + tis_data1
-            client.send_to(full_packet1, self._gateway_ip)
-            
-            # Request 2: Channel name (OpCode 0xF00E)
-            packet2 = TISPacket()
-            packet2.src_subnet = 1
-            packet2.src_device = 254
-            packet2.src_type = 0xFFFE
-            packet2.tgt_subnet = self._subnet
-            packet2.tgt_device = self._device_id
-            packet2.op_code = 0xF00E  # Channel name query
-            packet2.additional_data = bytes([self._channel])
-            
-            tis_data2 = packet2.build()
-            full_packet2 = ip_bytes + b'SMARTCLOUD' + tis_data2
-            client.send_to(full_packet2, self._gateway_ip)
-            
-            client.close()
-            
-            _LOGGER.debug(f"Requested state and name from {self._subnet}.{self._device_id} CH{self._channel}")
-        except Exception as e:
-            _LOGGER.error(f"Failed to request state: {e}")
     
     async def _request_channel_name_only(self) -> None:
         """Request only channel name from device (for retry)."""
