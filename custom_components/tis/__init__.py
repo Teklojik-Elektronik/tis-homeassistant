@@ -81,34 +81,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         _LOGGER.info(f"Starting TIS UDP listener on port {udp_port}")
         
-        # Try to bind to UDP port (may fail if gateway uses same port)
+        # Create UDP socket for receiving broadcasts
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         
+        # Enable broadcast reception
         try:
-            sock.bind(('', udp_port))
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        except AttributeError:
+            pass  # Not all systems support SO_BROADCAST
+        
+        try:
+            # Bind to all interfaces on the UDP port
+            sock.bind(('0.0.0.0', udp_port))
             sock.setblocking(False)
-            _LOGGER.info(f"Successfully bound to UDP port {udp_port}")
+            _LOGGER.info(f"✅ Successfully bound UDP socket to 0.0.0.0:{udp_port}")
         except OSError as e:
-            _LOGGER.warning(f"Could not bind to port {udp_port}: {e}")
-            _LOGGER.info("Will use polling-only mode (no real-time UDP updates)")
+            _LOGGER.error(f"❌ CRITICAL: Could not bind to port {udp_port}: {e}")
+            _LOGGER.error("UDP listener will NOT work! Check if another process is using the port.")
             sock.close()
             sock = None
         
         try:
             while True:
+                # Check if socket is available
+                if sock is None:
+                    _LOGGER.error("UDP socket not available, using polling mode only")
+                    await asyncio.sleep(5)
+                    # Polling logic will happen in the except block below
+                    raise BlockingIOError("No socket available")
+                
                 try:
-                    # Non-blocking receive with asyncio
-                    data, addr = await hass.loop.sock_recvfrom(sock, 1024)
+                    # Non-blocking receive with timeout
+                    data, addr = await asyncio.wait_for(
+                        hass.loop.sock_recvfrom(sock, 4096),
+                        timeout=3.0
+                    )
                     
-                    _LOGGER.info(f"📡 Received UDP packet from {addr}: {len(data)} bytes")
-                    _LOGGER.debug(f"Raw data: {data.hex()}")
+                    _LOGGER.info(f"📡 UDP packet from {addr}: {len(data)} bytes")
                     
                     # Parse packet (skip SMARTCLOUD header if present)
                     if b'SMARTCLOUD' in data:
                         smartcloud_index = data.find(b'SMARTCLOUD')
                         tis_data = data[smartcloud_index + 10:]
-                        _LOGGER.debug(f"Found SMARTCLOUD header at index {smartcloud_index}")
                     else:
                         tis_data = data
                     
@@ -174,49 +189,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 
                                 _LOGGER.info(f"Updated {updated_count} channels for {src_subnet}.{src_device}")
                 
-                except BlockingIOError:
-                    # No UDP data available, poll device states instead
-                    await asyncio.sleep(5)  # Poll every 5 seconds (reduced from 3)
+                except asyncio.TimeoutError:
+                    # No UDP packet received within timeout, continue listening
+                    continue
                     
-                    # Query all devices for state updates
-                    for device_key, device_data in entry_data["devices"].items():
-                        subnet = device_data.get("subnet")
-                        device_id = device_data.get("device_id")
-                        
-                        if subnet and device_id:
-                            try:
-                                # Send OpCode 0x0033 to query all channel states
-                                client = TISUDPClient(entry_data["gateway_ip"], udp_port)
-                                await client.async_connect(bind=False)
-                                
-                                # Get local IP for SMARTCLOUD header
-                                import socket as sock_module
-                                s = sock_module.socket(sock_module.AF_INET, sock_module.SOCK_DGRAM)
-                                try:
-                                    s.connect(('8.8.8.8', 80))
-                                    local_ip = s.getsockname()[0]
-                                finally:
-                                    s.close()
-                                
-                                ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-                                
-                                packet = TISPacket()
-                                packet.src_subnet = 1
-                                packet.src_device = 254
-                                packet.src_type = 0xFFFE
-                                packet.tgt_subnet = subnet
-                                packet.tgt_device = device_id
-                                packet.op_code = 0x0033
-                                packet.additional_data = bytes([])
-                                
-                                tis_data = packet.build()
-                                full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-                                client.send_to(full_packet, entry_data["gateway_ip"])
-                                client.close()
-                                
-                                _LOGGER.debug(f"Polling: Queried state for {subnet}.{device_id}")
-                            except Exception as poll_error:
-                                _LOGGER.debug(f"Polling error for {subnet}.{device_id}: {poll_error}")
+                except (BlockingIOError, OSError) as e:
+                    _LOGGER.debug(f"Socket error (will retry): {e}")
+                    await asyncio.sleep(1)
+                    continue
                     
                 except Exception as e:
                     _LOGGER.error(f"Error processing UDP packet: {e}", exc_info=True)
