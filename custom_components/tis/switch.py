@@ -195,6 +195,10 @@ class TISSwitch(SwitchEntity):
         entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
         callback_key = (self._subnet, self._device_id, self._channel)
         
+        # Check if callback already registered (duplicate entity!)
+        if callback_key in entry_data["update_callbacks"]:
+            _LOGGER.error(f"⚠️⚠️⚠️ DUPLICATE ENTITY! {callback_key} already registered! Current entity: '{self._name}'")
+        
         # Register state update callback
         entry_data["update_callbacks"][callback_key] = self._handle_feedback
         
@@ -270,10 +274,11 @@ class TISSwitch(SwitchEntity):
     
     async def _handle_feedback(self, is_on: bool, brightness: int):
         """Handle feedback from UDP listener."""
+        old_state = self._is_on
         self._is_on = is_on
         self._brightness = brightness
         self.async_write_ha_state()
-        _LOGGER.debug(f"Updated {self.name}: is_on={is_on}, brightness={brightness}%")
+        _LOGGER.warning(f"🔔 FEEDBACK HANDLER: Entity='{self._name}' CH{self._channel} | {old_state}→{is_on} | brightness={brightness}%")
     
     async def _handle_channel_name(self, name: str):
         """Handle channel name from UDP listener."""
