@@ -342,15 +342,16 @@ class TISSwitch(SwitchEntity):
             packet.op_code = 0x0031  # Control command
             
             # Additional data: [channel_index, brightness (0-248), 0, 0]
-            # Protocol uses 0-23 indexing, but entities use 1-24
-            channel_index = self._channel - 1  # Convert 1-24 to 0-23
+            # CRITICAL FIX: Device expects channel number 1-24, NOT index 0-23!
+            # Testing with self._channel directly instead of (self._channel - 1)
+            channel_number = self._channel  # Use 1-24 directly (NOT 0-23)
             # For ON: brightness=248 (100%), for OFF: brightness=0
             brightness = 248 if state else 0
             
             # DEBUG: Log the actual bytes being sent
-            _LOGGER.warning(f"🔍 DEBUG CH{self._channel}: self._channel={self._channel}, channel_index={channel_index}, brightness={brightness}")
+            _LOGGER.warning(f"🔍 DEBUG CH{self._channel}: self._channel={self._channel}, channel_number={channel_number}, brightness={brightness}")
             
-            packet.additional_data = bytes([channel_index, brightness, 0, 0])
+            packet.additional_data = bytes([channel_number, brightness, 0, 0])
             
             tis_data = packet.build()
             

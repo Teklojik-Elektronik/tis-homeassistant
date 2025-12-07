@@ -145,14 +145,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 else:
                                     _LOGGER.warning(f"⚠️ No callback registered for {callback_key}")                        # Handle multi-channel status (OpCode 0x0034)
                         elif parsed['op_code'] == 0x0034:
-                            if len(parsed['additional_data']) >= 24:
+                            # Protocol: additional_data[0] = channel_count, additional_data[1..24] = channel states
+                            if len(parsed['additional_data']) >= 25:
                                 _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device} (Initial state sync)")
                                 
-                                # Protocol: data[0-23] contains brightness for channels 1-24
+                                # Skip first byte (channel count), then read 24 channel states
                                 updated_count = 0
                                 for channel in range(1, 25):  # Channels 1-24
-                                    channel_index = channel - 1  # Array index 0-23
-                                    brightness_raw = parsed['additional_data'][channel_index]
+                                    brightness_raw = parsed['additional_data'][channel]  # Byte 1-24 (skip byte 0)
                                     brightness = int((brightness_raw / 248.0) * 100)
                                     is_on = brightness_raw > 0
                                     
