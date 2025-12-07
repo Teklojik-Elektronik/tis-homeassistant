@@ -123,16 +123,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         
                         # Handle feedback packet (OpCode 0x0032)
                         if parsed['op_code'] == 0x0032:
-                            if len(parsed['additional_data']) >= 3:
-                                # Protocol: data[0]=channel(0-23), data[1]=0xF8, data[2]=brightness(0-248)
-                                channel_index = parsed['additional_data'][0]  # 0-23
-                                channel = channel_index + 1  # Convert to 1-24 for switch entities
-                                brightness_raw = parsed['additional_data'][2]
+                            if len(parsed['additional_data']) >= 5:
+                                # Protocol confirmed from TISDevSearch:
+                                # 12 01 01 80 2B 00 32 FF FF [CH] F8 [Brightness] ...
+                                #                            ^^^^    ^^^^^^^^^^^^
+                                # data[0-1] = 0xFFFF (fixed header)
+                                # data[2] = Channel NUMBER (1-24, NOT index 0-23!)
+                                # data[3] = 0xF8 (fixed marker)
+                                # data[4] = Brightness (0-248)
+                                
+                                channel = parsed['additional_data'][2]  # Already 1-24!
+                                brightness_raw = parsed['additional_data'][4]
                                 
                                 # TIS uses 0-248 scale for 0-100%
                                 brightness = int((brightness_raw / 248.0) * 100)
                                 is_on = brightness_raw > 0
                                 
+                                _LOGGER.warning(f"🔦 Feedback RAW: {parsed['additional_data'][:8].hex()} → CH{channel}, brightness_raw={brightness_raw}")
                                 _LOGGER.info(f"🔦 Single channel feedback: {src_subnet}.{src_device} CH{channel} → "
                                             f"{'ON' if is_on else 'OFF'} ({brightness}%)")
                                 
