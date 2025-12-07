@@ -147,6 +147,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         elif parsed['op_code'] == 0x0034:
                             # Protocol: additional_data[0] = channel_count, additional_data[1..24] = channel states
                             if len(parsed['additional_data']) >= 25:
+                                _LOGGER.warning(f"🔍 OpCode 0x0034 RAW: {parsed['additional_data'].hex()}")
                                 _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device} (Initial state sync)")
                                 
                                 # Skip first byte (channel count), then read 24 channel states

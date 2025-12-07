@@ -99,22 +99,22 @@ async def async_setup_entry(
             # Get initial state for this channel
             initial_state = initial_states.get(str(channel))
             
-            entities.append(
-                TISSwitch(
-                    hass,
-                    entry,
-                    unique_id,
-                    device_name,
-                    model_name,
-                    subnet,
-                    device_id,
-                    channel,
-                    gateway_ip,
-                    udp_port,
-                    predefined_name,  # Pass channel name from JSON
-                    initial_state  # Pass initial state
-                )
+            switch_entity = TISSwitch(
+                hass,
+                entry,
+                unique_id,
+                device_name,
+                model_name,
+                subnet,
+                device_id,
+                channel,
+                gateway_ip,
+                udp_port,
+                predefined_name,  # Pass channel name from JSON
+                initial_state  # Pass initial state
             )
+            entities.append(switch_entity)
+            _LOGGER.warning(f"🔍 Created entity: CH{channel} → {predefined_name or f'CH{channel}'} (unique_id={unique_id}_ch{channel})")
     
     async_add_entities(entities)
     _LOGGER.info(f"Added {len(entities)} TIS switch entities")
@@ -203,7 +203,7 @@ class TISSwitch(SwitchEntity):
             entry_data["name_callbacks"] = {}
         entry_data["name_callbacks"][callback_key] = self._handle_channel_name
         
-        _LOGGER.debug(f"Registered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
+        _LOGGER.warning(f"🔍 Registered callback: {callback_key} → Entity='{self._name}', unique_id={self._attr_unique_id}")
         
         # Initial state will be queried once per device by async_setup_entry
         # Here we only request channel name if not already in JSON
@@ -349,7 +349,7 @@ class TISSwitch(SwitchEntity):
             brightness = 100 if state else 0
             
             # DEBUG: Log the actual bytes being sent
-            _LOGGER.warning(f"🔍 DEBUG CH{self._channel}: self._channel={self._channel}, channel_number={channel_number}, brightness={brightness}")
+            _LOGGER.warning(f"🔍 COMMAND: Entity='{self._name}' → CH{self._channel}, channel_number={channel_number}, brightness={brightness}")
             
             packet.additional_data = bytes([channel_number, brightness, 0, 0])
             
