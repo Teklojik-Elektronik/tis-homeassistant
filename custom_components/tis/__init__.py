@@ -687,7 +687,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         })
     
     async def udp_listener():
-        """Listen for TIS UDP packets and update entity states."""
+        """Listen for TIS UDP packets - DISABLED (PacketProtocol handles this)"""
+        # This function is disabled because TISControlProtocol's PacketProtocol
+        # already handles UDP packet reception and routing to handlers
+        _LOGGER.info("UDP listener disabled - using TISControlProtocol PacketProtocol")
+        try:
+            while True:
+                await asyncio.sleep(60)  # Keep task alive but do nothing
+        except asyncio.CancelledError:
+            _LOGGER.info("TIS UDP listener stopped")
+        return
         entry_data = hass.data[DOMAIN][entry.entry_id]
         udp_port = entry_data["udp_port"]
         

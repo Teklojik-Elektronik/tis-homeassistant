@@ -404,8 +404,11 @@ class TISHealthSensor(SensorEntity):
         _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
     
     async def async_update(self) -> None:
-        """Query health sensor data using OpCode 0x2024"""
-        from .tis_protocol import TISPacket, TISUDPClient
+        """Query health sensor data - TODO: Migrate to TISControlProtocol"""
+        # Temporarily disabled - needs TISControlProtocol migration
+        # from .tis_protocol import TISPacket, TISUDPClient
+        _LOGGER.debug(f"Health sensor update skipped (migration pending): {self._attr_name}")
+        return
         import socket
         
         try:
