@@ -281,7 +281,7 @@ class TISHealthSensor(SensorEntity):
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_value = None
         
-        # Set device class and unit based on sensor type
+        # Set device class and unit based on sensor type (TISControlProtocol format)
         if sensor_key == "temp":
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
             self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -291,9 +291,20 @@ class TISHealthSensor(SensorEntity):
         elif sensor_key == "eco2_state":
             self._attr_device_class = SensorDeviceClass.CO2
             self._attr_native_unit_of_measurement = "ppm"
+            self._attr_icon = "mdi:molecule-co2"
+        elif sensor_key == "tvoc_state":
+            self._attr_native_unit_of_measurement = "ppb"
+            self._attr_icon = "mdi:air-filter"
+        elif sensor_key == "co_state":
+            self._attr_device_class = SensorDeviceClass.CO
+            self._attr_native_unit_of_measurement = "ppm"
+            self._attr_icon = "mdi:molecule-co"
         elif sensor_key == "lux":
             self._attr_device_class = SensorDeviceClass.ILLUMINANCE
             self._attr_native_unit_of_measurement = "lx"
+        elif sensor_key == "noise":
+            self._attr_native_unit_of_measurement = "dB"
+            self._attr_icon = "mdi:volume-high"
         
         self._listener = None
         
@@ -314,13 +325,15 @@ class TISHealthSensor(SensorEntity):
             
             # Check if event is for this device
             if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
-                # Update sensor value based on sensor_key
+                # Map sensor_key (with _state suffix) to event data keys
+                # const.py uses: eco2_state, tvoc_state, co_state
+                # Event data has: eco2, tvoc, co, eco2_state, tvoc_state, co_state
                 value_map = {
                     "temp": data.get("temperature"),
                     "humidity": data.get("humidity"),
-                    "eco2_state": data.get("co2"),
-                    "voc": data.get("voc"),
-                    "pm25": data.get("pm25"),
+                    "eco2_state": data.get("eco2_state"),    # State value (0-5)
+                    "tvoc_state": data.get("tvoc_state"),    # State value (0-5)
+                    "co_state": data.get("co_state"),        # State value (0-5)
                     "lux": data.get("lux"),
                     "noise": data.get("noise")
                 }

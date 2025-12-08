@@ -123,37 +123,56 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info(f"Updated {updated_count} channels for {src_subnet}.{src_device}")
     
     async def handle_health_feedback(parsed: dict, entry_data: dict):
-        """Handle health sensor feedback (0x2024)"""
-        if len(parsed['additional_data']) >= 14:
+        """Handle health sensor feedback (0x2025) - Based on TISControlProtocol"""
+        if len(parsed['additional_data']) >= 15:
             src_subnet = parsed['src_subnet']
             src_device = parsed['src_device']
             data = parsed['additional_data']
             
-            # Parse health sensor data (temp, humidity, CO2, VOC, PM2.5, lux, noise)
-            temperature = int.from_bytes(data[0:2], 'big') / 10.0
-            humidity = data[2]
-            co2 = int.from_bytes(data[3:5], 'big')
-            voc = int.from_bytes(data[5:7], 'big')
-            pm25 = int.from_bytes(data[7:9], 'big')
-            lux = int.from_bytes(data[9:11], 'big')
-            noise = data[11]
-            
-            _LOGGER.info(f"🏥 Health sensor: {src_subnet}.{src_device} → "
-                        f"Temp={temperature}°C, Humidity={humidity}%, CO2={co2}ppm, "
-                        f"VOC={voc}ppb, PM2.5={pm25}µg/m³, Lux={lux}, Noise={noise}dB")
-            
-            # Fire event for sensor platform
-            hass.bus.async_fire("tis_health_feedback", {
-                "subnet": src_subnet,
-                "device": src_device,
-                "temperature": temperature,
-                "humidity": humidity,
-                "co2": co2,
-                "voc": voc,
-                "pm25": pm25,
-                "lux": lux,
-                "noise": noise
-            })
+            # Parse health sensor data (TISControlProtocol HealthFeedbackHandler format)
+            # Byte offsets from TISControlProtocol/Protocols/udp/PacketHandlers/HealthFeedbackHandler.py
+            try:
+                lux = int.from_bytes(data[5:7], 'big')          # [5-6]: Light level
+                noise = int.from_bytes(data[7:9], 'big')        # [7-8]: Noise level (dB)
+                eco2 = int.from_bytes(data[9:11], 'big')        # [9-10]: eCO2 (ppm)
+                tvoc = int.from_bytes(data[11:13], 'big')       # [11-12]: TVOC (ppb)
+                temperature = int(data[13])                     # [13]: Temperature (single byte, °C)
+                humidity = int(data[14])                        # [14]: Humidity (%)
+                
+                # Optional: CO sensor at [27-28] and state flags at [31-33]
+                co = 0
+                eco2_state = 0
+                tvoc_state = 0
+                co_state = 0
+                
+                if len(data) >= 29:
+                    co = int.from_bytes(data[27:29], 'big')     # [27-28]: CO level (ppm)
+                if len(data) >= 34:
+                    eco2_state = int(data[31])                  # [31]: eCO2 state (0-5)
+                    tvoc_state = int(data[32])                  # [32]: TVOC state (0-5)
+                    co_state = int(data[33])                    # [33]: CO state (0-5)
+                
+                _LOGGER.info(f"🏥 Health sensor: {src_subnet}.{src_device} → "
+                            f"Temp={temperature}°C, Humidity={humidity}%, eCO2={eco2}ppm, "
+                            f"TVOC={tvoc}ppb, CO={co}ppm, Lux={lux}lx, Noise={noise}dB")
+                
+                # Fire event for sensor platform
+                hass.bus.async_fire("tis_health_feedback", {
+                    "subnet": src_subnet,
+                    "device": src_device,
+                    "temperature": temperature,
+                    "humidity": humidity,
+                    "eco2": eco2,
+                    "tvoc": tvoc,
+                    "co": co,
+                    "lux": lux,
+                    "noise": noise,
+                    "eco2_state": eco2_state,
+                    "tvoc_state": tvoc_state,
+                    "co_state": co_state
+                })
+            except Exception as e:
+                _LOGGER.error(f"Error parsing health sensor data from {src_subnet}.{src_device}: {e}", exc_info=True)
     
     async def handle_energy_feedback(parsed: dict, entry_data: dict):
         """Handle energy meter feedback (0x2010)"""
