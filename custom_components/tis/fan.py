@@ -117,6 +117,14 @@ class TISFan(FanEntity):
         self._attr_percentage = 0
         
         self._update_callback_key = None
+        
+        # Device info - group all entities under same device
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Register state update callback."""

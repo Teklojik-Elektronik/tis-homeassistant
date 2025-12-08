@@ -123,6 +123,14 @@ class TISCover(CoverEntity):
         
         self._update_callback_key_up = None
         self._update_callback_key_down = None
+        
+        # Device info - group all entities under same device
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Register state update callbacks."""

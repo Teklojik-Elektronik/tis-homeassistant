@@ -157,6 +157,14 @@ class TISTemperatureSensor(SensorEntity):
         self._attr_native_value = None
         
         self._listener = None
+        
+        # Device info - group all sensors under same device
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to UDP events when added to hass."""
@@ -233,6 +241,14 @@ class TISHealthSensor(SensorEntity):
             self._attr_native_unit_of_measurement = "lx"
         
         self._listener = None
+        
+        # Device info - group all sensors under same device
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to event bus for health sensor feedback."""
@@ -344,6 +360,14 @@ class TISEnergySensor(SensorEntity):
             self._attr_native_unit_of_measurement = "Hz"
         
         self._listener = None
+        
+        # Device info - group all sensors under same device
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to event bus for energy meter feedback."""
