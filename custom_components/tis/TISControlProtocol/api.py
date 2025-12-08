@@ -227,6 +227,21 @@ class TISApi:
 
     async def parse_device_manager_request(self, data: dict) -> None:
         """Parse the device manager request."""
+        # Defensive: Check if data has required keys
+        if not data:
+            logging.warning("⚠️ parse_device_manager_request: Empty data received")
+            self.config_entries = {}
+            return self.config_entries
+        
+        if "appliances" not in data:
+            logging.warning(f"⚠️ parse_device_manager_request: No 'appliances' key in data. Available keys: {list(data.keys())}")
+            self.config_entries = {}
+            return self.config_entries
+        
+        if "configs" not in data:
+            logging.warning(f"⚠️ parse_device_manager_request: No 'configs' key, using defaults")
+            data["configs"] = {"lock_module_password": "0000"}
+        
         converted = {
             appliance: {
                 "device_id": [int(n) for n in details[0]["device_id"].split(",")],
@@ -256,9 +271,12 @@ class TISApi:
         self.config_entries = dict(grouped)
 
         # add a lock module config entry
-        self.config_entries["lock_module"] = {
-            "password": data["configs"]["lock_module_password"]
-        }
+        if "lock_module_password" in data.get("configs", {}):
+            self.config_entries["lock_module"] = {
+                "password": data["configs"]["lock_module_password"]
+            }
+        
+        logging.info(f"✅ Parsed {len(self.config_entries)} platform types: {list(self.config_entries.keys())}")
         return self.config_entries
 
     async def get_entities(self, platform: str = None) -> list:
