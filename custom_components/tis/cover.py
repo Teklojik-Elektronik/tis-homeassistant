@@ -210,7 +210,19 @@ class TISCover(CoverEntity):
 
     async def _send_control(self, channel: int, value: int) -> None:
         """Send control packet using OpCode 0x0031"""
+        import socket
+        
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Create control packet
             packet_obj = TISPacket.create_control_packet(
                 self._subnet,
@@ -219,14 +231,17 @@ class TISCover(CoverEntity):
                 value,
                 speed=0
             )
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.debug(f"Sent cover control to {self._subnet}.{self._device_id} CH{channel}: {value}")
+            _LOGGER.info(f"🏛️ Sent cover control to {self._subnet}.{self._device_id} CH{channel}: {value}")
+        except Exception as e:
+            _LOGGER.error(f"Error sending cover control: {e}", exc_info=True)
         except Exception as e:
             _LOGGER.error(f"Error sending cover control: {e}")

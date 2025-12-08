@@ -269,24 +269,37 @@ class TISClimate(ClimateEntity):
 
     async def async_update(self) -> None:
         """Query AC status using OpCode 0xE0EC"""
+        import socket
+        
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Create AC query packet
             packet_obj = TISPacket.create_ac_query_packet(
                 self._subnet, 
                 self._device_id, 
                 self._ac_number
             )
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.debug(f"Sent AC query to {self._subnet}.{self._device_id} AC{self._ac_number}")
+            _LOGGER.info(f"❄️ Sent AC query to {self._subnet}.{self._device_id} AC{self._ac_number} (OpCode 0xE0EC)")
         except Exception as e:
-            _LOGGER.error(f"Error querying AC status: {e}")
+            _LOGGER.error(f"Error querying AC status: {e}", exc_info=True)
 
     async def _send_ac_control(
         self, 
@@ -296,7 +309,19 @@ class TISClimate(ClimateEntity):
         fan_speed: int | None = None
     ) -> None:
         """Send AC control packet using OpCode 0xE0EE"""
+        import socket
+        
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Use current values if not provided
             if temperature is None:
                 temperature = int(self._attr_target_temperature)
@@ -315,15 +340,16 @@ class TISClimate(ClimateEntity):
                 mode,
                 fan_speed
             )
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.info(f"Sent AC control to {self._subnet}.{self._device_id} AC{self._ac_number}: "
+            _LOGGER.info(f"❄️ Sent AC control to {self._subnet}.{self._device_id} AC{self._ac_number}: "
                         f"State={state}, Temp={temperature}°C, Mode={mode}, Fan={fan_speed}")
         except Exception as e:
-            _LOGGER.error(f"Error sending AC control: {e}")
+            _LOGGER.error(f"Error sending AC control: {e}", exc_info=True)
