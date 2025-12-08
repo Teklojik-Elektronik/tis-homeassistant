@@ -76,7 +76,7 @@ async def async_setup_entry(
     gateway_ip = entry_data["gateway_ip"]
     udp_port = entry_data["udp_port"]
     
-    _LOGGER.info(f"Setting up TIS switch entities")
+    _LOGGER.info(f"Setting up TIS switch entities from {len(devices)} devices")
     
     entities = []
     for unique_id, device_data in devices.items():
@@ -93,7 +93,7 @@ async def async_setup_entry(
         
         # If device has explicit switch support from mapping, use that
         if switch_channels > 0:
-            _LOGGER.debug(f"Device {model_name} supports {switch_channels} switches (from mapping)")
+            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Switches: {switch_channels} channels")
             channels = switch_channels
         else:
             # Fallback to device.json channels (for backward compatibility)

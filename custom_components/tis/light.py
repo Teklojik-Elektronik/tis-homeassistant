@@ -32,7 +32,7 @@ async def async_setup_entry(
     gateway_ip = entry_data["gateway_ip"]
     udp_port = entry_data["udp_port"]
     
-    _LOGGER.info(f"Setting up TIS light entities")
+    _LOGGER.info(f"Setting up TIS light entities from {len(devices)} devices")
     
     entities = []
     for unique_id, device_data in devices.items():
@@ -51,7 +51,7 @@ async def async_setup_entry(
         total_light_channels = dimmer_channels + rgb_channels + rgbw_channels
         
         if total_light_channels > 0:
-            _LOGGER.debug(f"Device {model_name} supports {dimmer_channels} dimmers, {rgb_channels} RGB, {rgbw_channels} RGBW")
+            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Lights: dimmer={dimmer_channels}, rgb={rgb_channels}, rgbw={rgbw_channels}")
             
             # For now, only implement dimmer support
             if dimmer_channels > 0:

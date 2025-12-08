@@ -38,7 +38,7 @@ async def async_setup_entry(
     gateway_ip = entry_data["gateway_ip"]
     udp_port = entry_data["udp_port"]
     
-    _LOGGER.info(f"Setting up TIS sensor entities")
+    _LOGGER.info(f"Setting up TIS sensor entities from {len(devices)} devices")
     
     entities = []
     for unique_id, device_data in devices.items():
@@ -59,8 +59,11 @@ async def async_setup_entry(
         has_sensors = health_channels > 0 or energy_channels > 0 or temp_channels > 0 or lux_channels > 0 or analog_channels > 0
         
         if has_sensors:
+            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Sensors: health={health_channels}, energy={energy_channels}, temp={temp_channels}, lux={lux_channels}, analog={analog_channels}")
+            
             # Health sensor (temperature, humidity, CO2, VOC, etc.)
             if health_channels > 0:
+                _LOGGER.debug(f"Creating {len(HEALTH_SENSOR_TYPES)} health sensors for {model_name}")
                 for sensor_key, sensor_name in HEALTH_SENSOR_TYPES.items():
                     sensor_entity = TISHealthSensor(
                         hass,

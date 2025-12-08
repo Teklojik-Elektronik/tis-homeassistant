@@ -30,7 +30,7 @@ async def async_setup_entry(
     gateway_ip = entry_data["gateway_ip"]
     udp_port = entry_data["udp_port"]
     
-    _LOGGER.info(f"Setting up TIS binary sensor entities")
+    _LOGGER.info(f"Setting up TIS binary sensor entities from {len(devices)} devices")
     
     entities = []
     for unique_id, device_data in devices.items():
@@ -48,7 +48,7 @@ async def async_setup_entry(
         total_binary_channels = binary_sensor_channels + security_channels
         
         if total_binary_channels > 0:
-            _LOGGER.debug(f"Device {model_name} supports {total_binary_channels} binary sensors")
+            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Binary sensors: {total_binary_channels} (binary={binary_sensor_channels}, security={security_channels})")
             channels = total_binary_channels
             channel_names = device_data.get("channel_names", {})
             initial_states = device_data.get("initial_states", {})
