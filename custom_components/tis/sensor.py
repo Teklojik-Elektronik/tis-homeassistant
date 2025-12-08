@@ -207,21 +207,33 @@ class TISTemperatureSensor(SensorEntity):
     async def async_update(self) -> None:
         """Query temperature sensor data using OpCode 0xE3E7"""
         from .tis_protocol import TISPacket, TISUDPClient
+        import socket
         
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Create temperature query packet
             packet_obj = TISPacket.create_temp_query_packet(self._subnet, self._device_id)
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.debug(f"Sent temperature query to {self._subnet}.{self._device_id} CH{self._channel}")
+            _LOGGER.info(f"🌡️ Sent temperature query to {self._subnet}.{self._device_id} CH{self._channel} (OpCode 0xE3E7)")
         except Exception as e:
-            _LOGGER.error(f"Error querying temperature sensor: {e}")
+            _LOGGER.error(f"Error querying temperature sensor: {e}", exc_info=True)
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
@@ -342,21 +354,33 @@ class TISHealthSensor(SensorEntity):
     async def async_update(self) -> None:
         """Query health sensor data using OpCode 0x2024"""
         from .tis_protocol import TISPacket, TISUDPClient
+        import socket
         
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Create health query packet
             packet_obj = TISPacket.create_health_query_packet(self._subnet, self._device_id)
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.debug(f"Sent health query to {self._subnet}.{self._device_id}")
+            _LOGGER.info(f"📡 Sent health query to {self._subnet}.{self._device_id} (OpCode 0x2024)")
         except Exception as e:
-            _LOGGER.error(f"Error querying health sensor: {e}")
+            _LOGGER.error(f"Error querying health sensor: {e}", exc_info=True)
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
@@ -484,21 +508,33 @@ class TISEnergySensor(SensorEntity):
     async def async_update(self) -> None:
         """Query energy meter data using OpCode 0x2010"""
         from .tis_protocol import TISPacket, TISUDPClient
+        import socket
         
         try:
+            # Get local IP for SMARTCLOUD header
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+            
+            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            
             # Create energy query packet (channel 1, current values)
             packet_obj = TISPacket.create_energy_query_packet(self._subnet, self._device_id, channel=1, query_type='current')
-            packet_bytes = packet_obj.build()
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
             # Send via UDP
             client = TISUDPClient(self._gateway_ip, self._udp_port)
             await client.async_connect()
-            client.send_to(packet_bytes, self._gateway_ip)
+            client.send_to(full_packet, self._gateway_ip)
             client.close()
             
-            _LOGGER.debug(f"Sent energy query to {self._subnet}.{self._device_id}")
+            _LOGGER.info(f"⚡ Sent energy query to {self._subnet}.{self._device_id} (OpCode 0x2010)")
         except Exception as e:
-            _LOGGER.error(f"Error querying energy meter: {e}")
+            _LOGGER.error(f"Error querying energy meter: {e}", exc_info=True)
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
