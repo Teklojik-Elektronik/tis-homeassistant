@@ -133,28 +133,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info(f"🔍 Additional_data (first 20 bytes): {data[:20].hex(' ').upper()}")
             
             # Parse health sensor data (TISControlProtocol HealthFeedbackHandler format)
-            # CORRECTED: +2 byte offset due to additional_data header (0x01 0xFE)
-            # Verified with real TIS-HEALTH-CM device data (2025-12-08)
+            # Parser skips 01 FE (target device), so additional_data starts at 0x14
+            # Offsets adjusted based on real packet analysis (2025-12-08)
             try:
-                lux = int.from_bytes(data[7:9], 'big')          # [7-8]: Light level (lx)
-                noise = int.from_bytes(data[9:11], 'big')       # [9-10]: Noise level (raw value)
-                eco2 = int.from_bytes(data[11:13], 'big')       # [11-12]: eCO2 (ppm)
-                tvoc = int.from_bytes(data[13:15], 'big')       # [13-14]: TVOC (ppb)
-                temperature = int(data[15])                     # [15]: Temperature (single byte, °C)
-                humidity = int(data[16])                        # [16]: Humidity (%)
+                lux = int.from_bytes(data[5:7], 'big')          # [5-6]: Light level (lx)
+                noise = int.from_bytes(data[7:9], 'big')        # [7-8]: Noise level (raw value)
+                eco2 = int.from_bytes(data[9:11], 'big')        # [9-10]: eCO2 (ppm)
+                tvoc = int.from_bytes(data[11:13], 'big')       # [11-12]: TVOC (μg/m³)
+                temperature = int(data[13])                     # [13]: Temperature (single byte, °C)
+                humidity = int(data[14])                        # [14]: Humidity (%)
                 
-                # Optional: CO sensor at [29-30] and state flags at [33-35]
+                # Optional: CO sensor and state flags
                 co = 0
                 eco2_state = 0
                 tvoc_state = 0
                 co_state = 0
                 
-                if len(data) >= 31:
-                    co = int.from_bytes(data[29:31], 'big')     # [29-30]: CO level (ppm)
-                if len(data) >= 36:
-                    eco2_state = int(data[33])                  # [33]: eCO2 state (0-5)
-                    tvoc_state = int(data[34])                  # [34]: TVOC state (0-5)
-                    co_state = int(data[35])                    # [35]: CO state (0-5)
+                if len(data) >= 29:
+                    co = int.from_bytes(data[27:29], 'big')     # [27-28]: CO level (ppm)
+                if len(data) >= 34:
+                    eco2_state = int(data[31])                  # [31]: eCO2 state (0-5)
+                    tvoc_state = int(data[32])                  # [32]: TVOC state (0-5)
+                    co_state = int(data[33])                    # [33]: CO state (0-5)
                 
                 _LOGGER.info(f"🏥 Health sensor: {src_subnet}.{src_device} → "
                             f"Temp={temperature}°C, Humidity={humidity}%, eCO2={eco2}ppm, "
