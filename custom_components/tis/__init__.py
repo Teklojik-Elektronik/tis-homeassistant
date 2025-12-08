@@ -613,6 +613,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
                     
                     _LOGGER.info(f"📡 UDP packet from {addr}: {len(data)} bytes")
+                    _LOGGER.info(f"📦 HEX: {data.hex(' ').upper()}")
                     
                     # Parse packet (skip SMARTCLOUD header if present)
                     if b'SMARTCLOUD' in data:
