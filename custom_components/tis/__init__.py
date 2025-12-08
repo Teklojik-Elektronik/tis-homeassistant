@@ -806,7 +806,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except asyncio.CancelledError:
             _LOGGER.info("TIS UDP listener stopped")
         finally:
-            sock.close()
+            if sock is not None:
+                sock.close()
+                _LOGGER.debug("UDP socket closed")
     
     # Start UDP listener task
     udp_task = hass.loop.create_task(udp_listener())
