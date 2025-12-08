@@ -24,9 +24,9 @@ PLATFORMS: list[Platform] = [
     Platform.LIGHT,
     Platform.BINARY_SENSOR,
     Platform.SENSOR,
-    # Platform.CLIMATE,  # Enable when climate.py is ready
-    # Platform.COVER,    # Enable when cover.py is ready
-    # Platform.FAN,      # Enable when fan.py is ready
+    Platform.CLIMATE,  # AC/HVAC control ✅
+    Platform.COVER,    # Curtain/Blind control ✅
+    Platform.FAN,      # Fan speed control ✅
 ]
 DEVICES_FILE = "/config/tis_devices.json"
 
