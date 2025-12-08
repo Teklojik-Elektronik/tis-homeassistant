@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 _A=None
 from TISControlProtocol.api import TISApi
 from homeassistant.components.binary_sensor import STATE_OFF,STATE_ON,BinarySensorEntity
