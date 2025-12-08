@@ -186,12 +186,53 @@ class TISTemperatureSensor(SensorEntity):
                         self.async_write_ha_state()
         
         self._listener = self.hass.bus.async_listen("tis_udp_packet", handle_udp_event)
+        
+        # Start periodic query (every 30 seconds)
+        async def periodic_update(now):
+            """Periodic query for temperature sensor data."""
+            await self.async_update()
+        
+        # Query immediately on startup
+        await self.async_update()
+        
+        # Schedule periodic updates every 30 seconds
+        self._update_unsub = async_track_time_interval(
+            self.hass,
+            periodic_update,
+            timedelta(seconds=30)
+        )
+        
+        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
+    
+    async def async_update(self) -> None:
+        """Query temperature sensor data using OpCode 0xE3E7"""
+        from .tis_protocol import TISPacket, TISUDPClient
+        
+        try:
+            # Create temperature query packet
+            packet_obj = TISPacket.create_temp_query_packet(self._subnet, self._device_id)
+            packet_bytes = packet_obj.build()
+            
+            # Send via UDP
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect()
+            client.send_to(packet_bytes, self._gateway_ip)
+            client.close()
+            
+            _LOGGER.debug(f"Sent temperature query to {self._subnet}.{self._device_id} CH{self._channel}")
+        except Exception as e:
+            _LOGGER.error(f"Error querying temperature sensor: {e}")
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
         if self._listener:
             self._listener()
             self._listener = None
+        
+        # Cancel periodic updates
+        if hasattr(self, '_update_unsub') and self._update_unsub:
+            self._update_unsub()
+            self._update_unsub = None
 
 
 class TISHealthSensor(SensorEntity):
