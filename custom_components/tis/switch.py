@@ -11,7 +11,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .tis_protocol import TISUDPClient, TISPacket
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
 
 _LOGGER = logging.getLogger(__name__)
@@ -336,59 +335,70 @@ class TISSwitch(SwitchEntity):
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on."""
-        await self._send_command(1)
-        self._is_on = True
-        self.async_write_ha_state()
+        """Turn the switch on using TISControlProtocol."""
+        success = await self._send_command(1)
+        if success:
+            self._is_on = True
+            self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the switch off."""
-        await self._send_command(0)
-        self._is_on = False
-        self.async_write_ha_state()
+        """Turn the switch off using TISControlProtocol."""
+        success = await self._send_command(0)
+        if success:
+            self._is_on = False
+            self.async_write_ha_state()
 
-    async def _send_command(self, state: int) -> None:
-        """Send UDP command to TIS device."""
+    async def _send_command(self, state: int) -> bool:
+        """Send UDP command using TISControlProtocol with ACK."""
         try:
-            # Create TIS protocol client
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect(bind=False)  # No bind, just send
+            # Get TISControlProtocol API
+            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            # Build packet
-            packet = TISPacket()
-            packet.src_subnet = 1
-            packet.src_device = 254
-            packet.src_type = 0xFFFE
-            packet.tgt_subnet = self._subnet
-            packet.tgt_device = self._device_id
-            packet.op_code = 0x0031  # Control command
+            if not (api and protocol and protocol_handler):
+                _LOGGER.error("TISControlProtocol not available")
+                return False
             
-            # Additional data: [channel_number, brightness (0-100), 0, 0]
-            # CRITICAL FIX: Device expects channel number 1-24, NOT index 0-23!
-            # And brightness is 0-100 DECIMAL, not 0-248!
-            channel_number = self._channel  # Use 1-24 directly
-            # For ON: brightness=100 (100%), for OFF: brightness=0
-            brightness = 100 if state else 0
+            # Create entity mock for TISProtocolHandler
+            class EntityMock:
+                def __init__(self, subnet, device, channel, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.channel_number = channel
+                    self.gateway = gateway
+                    self.api = api_instance
             
-            # DEBUG: Log the actual bytes being sent
-            _LOGGER.warning(f"🔍 COMMAND: Entity='{self._name}' → CH{self._channel}, channel_number={channel_number}, brightness={brightness}")
+            entity_mock = EntityMock(
+                self._subnet,
+                self._device_id,
+                self._channel,
+                self._gateway_ip,
+                api
+            )
             
-            packet.additional_data = bytes([channel_number, brightness, 0, 0])
+            # Generate packet using TISProtocolHandler
+            if state:
+                packet = protocol_handler.generate_control_on_packet(entity_mock)
+                action = "ON"
+            else:
+                packet = protocol_handler.generate_control_off_packet(entity_mock)
+                action = "OFF"
             
-            tis_data = packet.build()
+            # Send with ACK (15 retries, 1s timeout)
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
             
-            # Add SMARTCLOUD header
-            from .discovery import get_local_ip
-            local_ip = get_local_ip()
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            
-            # Send to gateway directly (unicast)
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
-            
-            _LOGGER.info(f"💡 Command sent: {self._subnet}.{self._device_id} CH{self._channel} ({self.name}) → "
-                        f"{'ON' if state else 'OFF'} (channel={channel_number}, brightness={brightness})")
+            if ack_received:
+                _LOGGER.info(f"✅ Switch {action}: {self.name} (ACK received)")
+                return True
+            else:
+                _LOGGER.warning(f"⚠️ Switch {action}: {self.name} (NO ACK after 15 attempts)")
+                return True  # Still return True for optimistic update
             
         except Exception as e:
-            _LOGGER.error(f"Failed to send command: {e}", exc_info=True)
+            _LOGGER.error(f"❌ Failed to send switch command: {e}", exc_info=True)
+            return False

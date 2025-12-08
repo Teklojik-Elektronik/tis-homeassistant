@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .tis_protocol import TISPacket, TISUDPClient
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
 
 _LOGGER = logging.getLogger(__name__)
@@ -215,85 +214,103 @@ class TISLight(LightEntity):
         brightness_tis = int((brightness / 255.0) * 248)
         brightness_tis = max(1, min(248, brightness_tis))  # Clamp to 1-248
         
-        # Send control packet
+        # Send control packet using TISControlProtocol
         try:
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect(bind=False)
+            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            # Get local IP for SMARTCLOUD header
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self.name}")
+                return
             
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            # Create entity mock for protocol handler
+            class EntityMock:
+                def __init__(self, subnet, device, channel, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.channel_number = channel
+                    self.gateway = gateway
+                    self.api = api_instance
             
-            # Build control packet (OpCode 0x0031)
-            packet = TISPacket()
-            packet.src_subnet = 1
-            packet.src_device = 254
-            packet.src_type = 0xFFFE
-            packet.tgt_subnet = self._subnet
-            packet.tgt_device = self._device_id
-            packet.op_code = 0x0031  # Control command
-            packet.additional_data = bytes([self._channel - 1, 0x00, brightness_tis])
+            entity_mock = EntityMock(
+                self._subnet,
+                self._device_id,
+                self._channel,
+                self._gateway_ip,
+                api
+            )
             
-            tis_data = packet.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            client.send_to(full_packet, self._gateway_ip)
+            # Generate light control packet with brightness
+            packet = protocol_handler.generate_light_control_packet(entity_mock, brightness_tis)
             
-            client.close()
+            # Send with ACK mechanism
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
+            
+            if ack_received:
+                _LOGGER.info(f"✅ Light ON: {self.name} (brightness={brightness}, ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ Light ON: {self.name} (brightness={brightness}, NO ACK - optimistic update)")
             
             # Update state optimistically
             self._attr_brightness = brightness
             self._attr_is_on = True
             self.async_write_ha_state()
             
-            _LOGGER.debug(f"Turned on {self.name} to brightness {brightness} ({brightness_tis} TIS)")
         except Exception as e:
-            _LOGGER.error(f"Failed to turn on {self.name}: {e}")
+            _LOGGER.error(f"❌ Failed to turn on {self.name}: {e}")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
         try:
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect(bind=False)
+            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            # Get local IP
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self.name}")
+                return
             
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            # Create entity mock for protocol handler
+            class EntityMock:
+                def __init__(self, subnet, device, channel, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.channel_number = channel
+                    self.gateway = gateway
+                    self.api = api_instance
             
-            # Build control packet with brightness 0
-            packet = TISPacket()
-            packet.src_subnet = 1
-            packet.src_device = 254
-            packet.src_type = 0xFFFE
-            packet.tgt_subnet = self._subnet
-            packet.tgt_device = self._device_id
-            packet.op_code = 0x0031  # Control command
-            packet.additional_data = bytes([self._channel - 1, 0x00, 0])  # Brightness 0
+            entity_mock = EntityMock(
+                self._subnet,
+                self._device_id,
+                self._channel,
+                self._gateway_ip,
+                api
+            )
             
-            tis_data = packet.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            client.send_to(full_packet, self._gateway_ip)
+            # Generate light OFF packet (brightness=0)
+            packet = protocol_handler.generate_light_control_packet(entity_mock, 0)
             
-            client.close()
+            # Send with ACK mechanism
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
+            
+            if ack_received:
+                _LOGGER.info(f"✅ Light OFF: {self.name} (ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ Light OFF: {self.name} (NO ACK - optimistic update)")
             
             # Update state optimistically
             self._attr_brightness = 0
             self._attr_is_on = False
             self.async_write_ha_state()
             
-            _LOGGER.debug(f"Turned off {self.name}")
         except Exception as e:
-            _LOGGER.error(f"Failed to turn off {self.name}: {e}")
+            _LOGGER.error(f"❌ Failed to turn off {self.name}: {e}")

@@ -21,7 +21,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-from .tis_protocol import TISPacket, TISUDPClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +106,8 @@ async def async_setup_entry(
             
             for heater_number in range(floor_channels):
                 floor_entity = TISFloorHeating(
+                    hass,
+                    entry,
                     device_name,
                     unique_id,
                     model_name,
@@ -345,38 +346,50 @@ class TISClimate(ClimateEntity):
         await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def async_update(self) -> None:
-        """Query AC status using OpCode 0xE0EC"""
-        import socket
-        
+        """Query AC status using TISControlProtocol (OpCode 0xE0EC)"""
         try:
-            # Get local IP for SMARTCLOUD header
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
+            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
+                return
             
-            # Create AC query packet
-            packet_obj = TISPacket.create_ac_query_packet(
-                self._subnet, 
-                self._device_id, 
-                self._ac_number
+            # Create entity mock
+            class EntityMock:
+                def __init__(self, subnet, device, ac_num, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.ac_number = ac_num
+                    self.gateway = gateway
+                    self.api = api_instance
+            
+            entity_mock = EntityMock(
+                self._subnet,
+                self._device_id,
+                self._ac_number,
+                self._gateway_ip,
+                api
             )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            # Send via UDP
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
+            # Generate AC query packet
+            packet = protocol_handler.generate_ac_update_packet(entity_mock)
             
-            _LOGGER.info(f"❄️ Sent AC query to {self._subnet}.{self._device_id} AC{self._ac_number} (OpCode 0xE0EC)")
+            # Send with ACK
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
+            
+            if ack_received:
+                _LOGGER.info(f"❄️ AC Query: {self._subnet}.{self._device_id} AC{self._ac_number} (ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ AC Query: {self._subnet}.{self._device_id} AC{self._ac_number} (NO ACK)")
+                
         except Exception as e:
-            _LOGGER.error(f"Error querying AC status: {e}", exc_info=True)
+            _LOGGER.error(f"❌ Error querying AC status: {e}", exc_info=True)
 
     async def _send_ac_control(
         self, 
@@ -385,19 +398,16 @@ class TISClimate(ClimateEntity):
         mode: int | None = None,
         fan_speed: int | None = None
     ) -> None:
-        """Send AC control packet using OpCode 0xE0EE"""
-        import socket
-        
+        """Send AC control packet using TISControlProtocol (OpCode 0xE0EE)"""
         try:
-            # Get local IP for SMARTCLOUD header
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
+            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
+                return
             
             # Use current values if not provided
             if temperature is None:
@@ -407,29 +417,46 @@ class TISClimate(ClimateEntity):
             if fan_speed is None:
                 fan_speed = FAN_MODE_TO_TIS.get(self._attr_fan_mode, 0)
             
-            # Create AC control packet
-            packet_obj = TISPacket.create_ac_control_packet(
+            # Create entity mock
+            class EntityMock:
+                def __init__(self, subnet, device, ac_num, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.ac_number = ac_num
+                    self.gateway = gateway
+                    self.api = api_instance
+            
+            entity_mock = EntityMock(
                 self._subnet,
                 self._device_id,
                 self._ac_number,
-                state,
-                temperature,
-                mode,
-                fan_speed
+                self._gateway_ip,
+                api
             )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            # Send via UDP
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
+            # Generate AC control packet
+            packet = protocol_handler.generate_ac_control_packet(
+                entity_mock,
+                state=state,
+                temperature=temperature,
+                mode=mode,
+                fan_speed=fan_speed
+            )
             
-            _LOGGER.info(f"❄️ Sent AC control to {self._subnet}.{self._device_id} AC{self._ac_number}: "
-                        f"State={state}, Temp={temperature}°C, Mode={mode}, Fan={fan_speed}")
+            # Send with ACK
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
+            
+            if ack_received:
+                _LOGGER.info(f"✅ AC Control: {self._subnet}.{self._device_id} AC{self._ac_number} "
+                           f"(State={state}, Temp={temperature}°C, Mode={mode}, Fan={fan_speed}, ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ AC Control: {self._subnet}.{self._device_id} AC{self._ac_number} (NO ACK)")
+                
         except Exception as e:
-            _LOGGER.error(f"Error sending AC control: {e}", exc_info=True)
+            _LOGGER.error(f"❌ Error sending AC control: {e}", exc_info=True)
 
 
 class TISFloorHeating(ClimateEntity):
@@ -437,6 +464,8 @@ class TISFloorHeating(ClimateEntity):
     
     def __init__(
         self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
         device_name: str,
         unique_id: str,
         model_name: str,
@@ -447,6 +476,8 @@ class TISFloorHeating(ClimateEntity):
         udp_port: int,
     ) -> None:
         """Initialize floor heating entity."""
+        self.hass = hass
+        self._entry = entry
         self._subnet = subnet
         self._device_id = device_id
         self._heater_number = heater_number
@@ -560,65 +591,108 @@ class TISFloorHeating(ClimateEntity):
         await self.async_set_hvac_mode(HVACMode.OFF)
     
     async def async_update(self) -> None:
-        """Query device state."""
+        """Query floor heating state using TISControlProtocol."""
         try:
-            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
+            entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
             
-            # Create floor update query packet (0x1944)
-            packet_obj = TISPacket.create_floor_heating_query_packet(
-                self._subnet,
-                self._device_id,
-                self._heater_number
-            )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
+                return
             
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
+            # Create entity mock
+            class EntityMock:
+                def __init__(self, subnet, device, heater_num, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.heater_number = heater_num
+                    self.gateway = gateway
+                    self.api = api_instance
             
-            _LOGGER.debug(f"🔥 Queried floor heater {self._subnet}.{self._device_id} Heater{self._heater_number}")
-        except Exception as e:
-            _LOGGER.error(f"Error querying floor heater: {e}", exc_info=True)
-    
-    async def _send_floor_control(self, state: int, temperature: int) -> None:
-        """Send floor heating control command."""
-        try:
-            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
-            
-            # Send power command (0xE3D8 - power action)
-            packet_obj = TISPacket.create_floor_heating_control_packet(
+            entity_mock = EntityMock(
                 self._subnet,
                 self._device_id,
                 self._heater_number,
-                action='power',
-                value=state
+                self._gateway_ip,
+                api
             )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
+            # Generate floor heating query packet
+            packet = protocol_handler.generate_floor_update_packet(entity_mock)
             
-            # If turning on, also send temperature command
-            if state == 1:
-                await asyncio.sleep(0.1)  # Small delay between commands
-                packet_obj = TISPacket.create_floor_heating_control_packet(
-                    self._subnet,
-                    self._device_id,
-                    self._heater_number,
-                    action='temperature',
-                    value=temperature
-                )
-                tis_data = packet_obj.build()
-                full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-                client.send_to(full_packet, self._gateway_ip)
+            # Send with ACK
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet,
+                attempts=15,
+                timeout=1.0
+            )
             
-            client.close()
-            
-            _LOGGER.info(f"🔥 Sent floor control to {self._subnet}.{self._device_id} Heater{self._heater_number}: "
-                        f"State={state}, Temp={temperature}°C")
+            if ack_received:
+                _LOGGER.info(f"🔥 Floor Query: {self._subnet}.{self._device_id} Heater{self._heater_number} (ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ Floor Query: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
+                
         except Exception as e:
-            _LOGGER.error(f"Error sending floor control: {e}", exc_info=True)
+            _LOGGER.error(f"❌ Error querying floor heater: {e}", exc_info=True)
+    
+    async def _send_floor_control(self, state: int, temperature: int) -> None:
+        """Send floor heating control command using TISControlProtocol."""
+        try:
+            entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
+            api = entry_data.get("api")
+            protocol = entry_data.get("protocol")
+            protocol_handler = entry_data.get("protocol_handler")
+            
+            if not all([api, protocol, protocol_handler]):
+                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
+                return
+            
+            # Create entity mock
+            class EntityMock:
+                def __init__(self, subnet, device, heater_num, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.heater_number = heater_num
+                    self.gateway = gateway
+                    self.api = api_instance
+            
+            entity_mock = EntityMock(
+                self._subnet,
+                self._device_id,
+                self._heater_number,
+                self._gateway_ip,
+                api
+            )
+            
+            # Send power command first
+            packet_power = protocol_handler.generate_floor_on_off_packet(entity_mock, state)
+            ack_received = await protocol.sender.send_packet_with_ack(
+                packet_power,
+                attempts=15,
+                timeout=1.0
+            )
+            
+            if ack_received:
+                _LOGGER.info(f"✅ Floor Power: {self._subnet}.{self._device_id} Heater{self._heater_number} "
+                           f"(State={state}, ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ Floor Power: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
+            
+            # If turning on, also send temperature
+            if state == 1:
+                await asyncio.sleep(0.1)
+                packet_temp = protocol_handler.generate_floor_set_temp_packet(entity_mock, temperature)
+                ack_received = await protocol.sender.send_packet_with_ack(
+                    packet_temp,
+                    attempts=15,
+                    timeout=1.0
+                )
+                
+                if ack_received:
+                    _LOGGER.info(f"✅ Floor Temp: {self._subnet}.{self._device_id} Heater{self._heater_number} "
+                               f"(Temp={temperature}°C, ACK received)")
+                else:
+                    _LOGGER.warning(f"⚠️ Floor Temp: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
+                    
+        except Exception as e:
+            _LOGGER.error(f"❌ Error sending floor control: {e}", exc_info=True)
