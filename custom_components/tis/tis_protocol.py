@@ -118,14 +118,14 @@ class TISPacket:
     def parse(packet: bytes) -> Optional[Dict[str, Any]]:
         """Paketi parse et"""
         try:
-            # Find AA AA header
+            # Find AA AA header (always present in real UDP packets)
             if b'\xAA\xAA' in packet:
-                # Split and take the part after AA AA
-                # Note: We need to reconstruct the full packet for parsing logic below which expects AA AA at start
-                # But wait, the logic below uses indices assuming packet starts with AA AA.
-                # So we just need to find where AA AA starts.
                 start_index = packet.find(b'\xAA\xAA')
                 packet = packet[start_index:]
+            else:
+                # If no AA AA found, packet might be truncated or from debug console
+                # Log warning and try to parse anyway
+                _LOGGER.warning(f"Packet missing AA AA header, length={len(packet)}")
             
             if len(packet) < 13:
                 return None
