@@ -76,7 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TISConfigEntry) -> bool:
     
     # Read version from manifest
     try:
-        async with aiofiles.open("/config/custom_components/tis_integration/manifest.json", "r") as f:
+        async with aiofiles.open("/config/custom_components/tis_control/manifest.json", "r") as f:
             contents = await f.read()
             data = json.loads(contents)
             version = data["version"]
@@ -90,7 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TISConfigEntry) -> bool:
         hass=hass,
         domain=DOMAIN,
         devices_dict=DEVICES_DICT,
-        display_logo="./custom_components/tis_integration/images/logo.png",
+        display_logo="./custom_components/tis_control/images/logo.png",
         version=version
     )
     
