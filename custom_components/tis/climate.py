@@ -159,6 +159,11 @@ class TISClimate(ClimateEntity):
         self._attr_target_temperature = 24
         self._attr_current_temperature = None
         
+        # Mode-specific temperatures (TISControlProtocol support)
+        self._cool_temp = 24
+        self._heat_temp = 24
+        self._auto_temp = 24
+        
         self._listener = None
         self._listener_luna = None
         
@@ -191,10 +196,25 @@ class TISClimate(ClimateEntity):
                     mode = data.get("mode")
                     self._attr_hvac_mode = TIS_HVAC_MODES.get(mode, HVACMode.AUTO)
                 
-                # Update temperature
-                temperature = data.get("temperature")
-                if temperature is not None:
-                    self._attr_target_temperature = temperature
+                # Update mode-specific temperatures
+                cool_temp = data.get("cool_temp")
+                heat_temp = data.get("heat_temp")
+                auto_temp = data.get("auto_temp")
+                
+                if cool_temp is not None:
+                    self._cool_temp = cool_temp
+                if heat_temp is not None:
+                    self._heat_temp = heat_temp
+                if auto_temp is not None:
+                    self._auto_temp = auto_temp
+                
+                # Set target_temperature based on current mode
+                if self._attr_hvac_mode == HVACMode.COOL:
+                    self._attr_target_temperature = self._cool_temp
+                elif self._attr_hvac_mode == HVACMode.HEAT:
+                    self._attr_target_temperature = self._heat_temp
+                elif self._attr_hvac_mode == HVACMode.AUTO or self._attr_hvac_mode == HVACMode.HEAT_COOL:
+                    self._attr_target_temperature = self._auto_temp
                 
                 # Update fan mode
                 fan_speed = data.get("fan_speed")
@@ -202,7 +222,7 @@ class TISClimate(ClimateEntity):
                     self._attr_fan_mode = TIS_FAN_MODES.get(fan_speed, FAN_AUTO)
                 
                 self.async_write_ha_state()
-                _LOGGER.info(f"Updated {self._attr_name}: {self._attr_hvac_mode}, {self._attr_target_temperature}°C, Fan={self._attr_fan_mode}")
+                _LOGGER.info(f"Updated {self._attr_name}: {self._attr_hvac_mode}, Cool={self._cool_temp}°C, Heat={self._heat_temp}°C, Auto={self._auto_temp}°C, Fan={self._attr_fan_mode}")
         
         @callback
         def handle_luna_temp_feedback(event):
@@ -242,9 +262,18 @@ class TISClimate(ClimateEntity):
             # Turn off AC
             await self._send_ac_control(state=0)
         else:
-            # Turn on with specific mode
+            # Turn on with specific mode and its temperature
             tis_mode = HVAC_MODE_TO_TIS.get(hvac_mode, 3)  # Default to AUTO
-            await self._send_ac_control(state=1, mode=tis_mode)
+            
+            # Use mode-specific temperature
+            if hvac_mode == HVACMode.COOL:
+                self._attr_target_temperature = self._cool_temp
+            elif hvac_mode == HVACMode.HEAT:
+                self._attr_target_temperature = self._heat_temp
+            elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
+                self._attr_target_temperature = self._auto_temp
+            
+            await self._send_ac_control(state=1, mode=tis_mode, temperature=self._attr_target_temperature)
         
         self._attr_hvac_mode = hvac_mode
         self.async_write_ha_state()
@@ -256,7 +285,15 @@ class TISClimate(ClimateEntity):
             return
         
         temperature = int(temperature)
-        _LOGGER.info(f"{self._attr_name}: Setting temperature to {temperature}°C")
+        _LOGGER.info(f"{self._attr_name}: Setting temperature to {temperature}°C (Mode: {self._attr_hvac_mode})")
+        
+        # Update mode-specific temperature storage
+        if self._attr_hvac_mode == HVACMode.COOL:
+            self._cool_temp = temperature
+        elif self._attr_hvac_mode == HVACMode.HEAT:
+            self._heat_temp = temperature
+        elif self._attr_hvac_mode == HVACMode.AUTO or self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            self._auto_temp = temperature
         
         # If currently OFF, turn on with last mode
         if self._attr_hvac_mode == HVACMode.OFF:
