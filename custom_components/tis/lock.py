@@ -13,8 +13,11 @@ from TISControlProtocol.api import TISApi
 import asyncio,logging
 async def async_setup_entry(hass,entry,async_add_devices):
     B=entry.runtime_data.api;A=await B.get_entities(platform='lock_module')
-    if A is None:logging.error('No lock module found in the configuration');return
-    else:async_add_devices([TISControlLock('Admin Lock',A['password'])])
+    if A and isinstance(A, dict) and 'password' in A:
+        async_add_devices([TISControlLock('Admin Lock',A['password'])])
+    else:
+        logging.warning('No lock module found or invalid configuration - skipping lock setup')
+        async_add_devices([])
 class TISControlLock(LockEntity):
     def __init__(A,name,password):A._attr_name=name;A.unique_id=f"lock_{A}";A._attr_is_locked=_C;A._attr_password=password;A._attr_changed_by=None;A._attr_code_format='.*';A._attr_is_locking=_A;A._attr_is_unlocking=_A;A._attr_is_opening=_A;A._attr_is_open=_A;A._attr_timeout=60
     @property

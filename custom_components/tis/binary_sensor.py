@@ -8,8 +8,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from.import TISConfigEntry
 async def async_setup_entry(hass,entry,async_add_entities):
     A=entry.runtime_data.api;B=await A.get_entities(platform='binary_sensor')
-    if B:C=[(C,next(iter(A['channels'][0].values())),A['device_id'],A['gateway'],A['is_protected'])for B in B for(C,A)in B.items()];D=[TISBinarySensor(tis_api=A,sensor_name=B,channel_number=C,device_id=D,gateway=E)for(B,C,D,E,F)in C]
-    async_add_entities(D)
+    if B and len(B) > 0:
+        C=[(C,next(iter(A['channels'][0].values())),A['device_id'],A['gateway'],A['is_protected'])for B in B for(C,A)in B.items()]
+        D=[TISBinarySensor(tis_api=A,sensor_name=B,channel_number=C,device_id=D,gateway=E)for(B,C,D,E,F)in C]
+        async_add_entities(D)
+    else:
+        logging.info("No binary sensors found in configuration")
+        async_add_entities([])
 class TISBinarySensor(BinarySensorEntity):
     def __init__(A,tis_api,sensor_name,channel_number,device_id,gateway):A._api=tis_api;A._name=sensor_name;A._device_id=device_id;A._channel_number=int(channel_number);A._listener=_A;A._attr_state=_A;A._attr_is_on=_A;A._attr_device_class='motion',;A._gateway=gateway;A._attr_unique_id=f"{A}_{A}"
     async def async_added_to_hass(A):
