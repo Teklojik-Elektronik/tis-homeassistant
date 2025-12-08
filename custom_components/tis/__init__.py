@@ -21,17 +21,17 @@ _LOGGER = logging.getLogger(__name__)
 
 # All supported platforms
 PLATFORMS: list[Platform] = [
-    Platform.SWITCH,
-    Platform.LIGHT,
-    Platform.BINARY_SENSOR,
-    Platform.SENSOR,
-    Platform.CLIMATE,  # AC/HVAC control + Floor Heating ✅
-    Platform.COVER,    # Curtain/Blind control ✅
-    Platform.FAN,      # Fan speed control ✅
-    Platform.BUTTON,   # Universal Switch ✅
-    Platform.LOCK,     # Admin Lock ✅
-    Platform.SELECT,   # Security Mode ✅
-    Platform.WEATHER,  # Weather Station ✅
+    Platform.SWITCH,      # ✅ Migrated to TISControlProtocol
+    Platform.LIGHT,       # ✅ Migrated to TISControlProtocol
+    Platform.CLIMATE,     # ✅ Migrated to TISControlProtocol (AC + Floor Heating)
+    Platform.SELECT,      # ✅ Migrated to TISControlProtocol (Security Mode)
+    Platform.BINARY_SENSOR,  # Passive entity (no migration needed)
+    Platform.SENSOR,      # Passive entity (no migration needed)
+    # Platform.COVER,    # ❌ TODO: Migrate to TISControlProtocol
+    # Platform.FAN,      # ❌ TODO: Migrate to TISControlProtocol
+    # Platform.BUTTON,   # ❌ TODO: Migrate to TISControlProtocol
+    # Platform.LOCK,     # ✅ No tis_protocol usage
+    # Platform.WEATHER,  # ❌ TODO: Migrate to TISControlProtocol
 ]
 DEVICES_FILE = "/config/tis_devices.json"
 

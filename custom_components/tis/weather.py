@@ -22,7 +22,8 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-from .tis_protocol import TISPacket, TISUDPClient
+
+_LOGGER = logging.getLogger(__name__)
 
 _LOGGER = logging.getLogger(__name__)
 
