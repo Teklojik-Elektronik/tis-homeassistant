@@ -227,20 +227,9 @@ class TISApi:
 
     async def parse_device_manager_request(self, data: dict) -> None:
         """Parse the device manager request."""
-        # Defensive: Check if data has required keys
-        if not data:
-            logging.warning("⚠️ parse_device_manager_request: Empty data received")
+        if not data or "appliances" not in data:
             self.config_entries = {}
             return self.config_entries
-        
-        if "appliances" not in data:
-            logging.warning(f"⚠️ parse_device_manager_request: No 'appliances' key in data. Available keys: {list(data.keys())}")
-            self.config_entries = {}
-            return self.config_entries
-        
-        if "configs" not in data:
-            logging.warning(f"⚠️ parse_device_manager_request: No 'configs' key, using defaults")
-            data["configs"] = {"lock_module_password": "0000"}
         
         converted = {
             appliance: {
@@ -271,12 +260,9 @@ class TISApi:
         self.config_entries = dict(grouped)
 
         # add a lock module config entry
-        if "lock_module_password" in data.get("configs", {}):
-            self.config_entries["lock_module"] = {
-                "password": data["configs"]["lock_module_password"]
-            }
-        
-        logging.info(f"✅ Parsed {len(self.config_entries)} platform types: {list(self.config_entries.keys())}")
+        self.config_entries["lock_module"] = {
+            "password": data["configs"]["lock_module_password"]
+        }
         return self.config_entries
 
     async def get_entities(self, platform: str = None) -> list:
@@ -298,7 +284,7 @@ class TISApi:
         return entities
 
     async def read_appliances(self, directory: str) -> dict:
-        """Read device data from tis_devices.json (addon format) or app.json (legacy)."""
+        """Read device data from tis_devices.json (addon format) or app.json (encrypted)."""
         
         # Priority 1: Try tis_devices.json (from addon)
         tis_devices_file = "/config/tis_devices.json"
@@ -306,42 +292,39 @@ class TISApi:
             async with aiofiles.open(tis_devices_file, "r") as f:
                 raw_data = await f.read()
                 if raw_data:
-                    devices = json.loads(raw_data)
-                    logging.info(f"✅ Loaded {len(devices)} devices from {tis_devices_file}")
-                    # Convert addon format to integration format
-                    return self._convert_addon_format(devices)
+                    addon_devices = json.loads(raw_data)
+                    logging.info(f"✅ Loaded {len(addon_devices)} devices from tis_devices.json")
+                    # Convert addon format to original format
+                    return self._convert_addon_to_original_format(addon_devices)
         except FileNotFoundError:
-            logging.debug(f"tis_devices.json not found, trying legacy app.json")
+            pass
         except Exception as e:
-            logging.error(f"❌ Error reading tis_devices.json: {e}")
+            logging.error(f"Error reading tis_devices.json: {e}")
         
-        # Priority 2: Fallback to app.json (encrypted legacy format)
+        # Priority 2: Fallback to app.json (encrypted)
         file_name = "app.json"
         output_file = os.path.join(directory, file_name)
 
         try:
             async with aiofiles.open(output_file, "r") as f:
                 raw_data = await f.read()
-                logging.debug(f"📄 Read {len(raw_data)} bytes from {output_file}")
                 if raw_data:
                     encrypted_data = json.loads(raw_data)
                     data = self.decrypt_data(encrypted_data)
-                    logging.info(f"✅ Successfully loaded and decrypted appliance data from app.json")
                 else:
-                    logging.warning(f"⚠️ app.json is empty")
                     data = {}
         except FileNotFoundError:
-            logging.warning(f"⚠️ No device configuration found. Please use TIS addon to scan and add devices: http://homeassistant.local:8888")
             data = {}
         except Exception as e:
-            logging.error(f"❌ Error reading app.json: {e}")
+            logging.error(f"Error reading app.json: {e}")
             data = {}
         return data
     
-    def _convert_addon_format(self, addon_devices: dict) -> dict:
-        """Convert addon device format to integration format.
+    
+    def _convert_addon_to_original_format(self, addon_devices: dict) -> dict:
+        """Convert addon format to original TISControlProtocol format.
         
-        Addon format:
+        Addon format (tis_devices.json):
         {
             "tis_1_10": {
                 "subnet": 1,
@@ -350,54 +333,74 @@ class TISApi:
                 "channels": 1,
                 "name": "Salon Dimmer",
                 "entity_type": "light",
-                "channel_names": {},
-                "initial_states": {}
+                "channel_names": {"1": "Ana Işık"}
             }
         }
         
-        Integration format:
+        Original format (app.json after decrypt):
         {
             "appliances": {
-                "1_10": {
-                    "model": "DALI DIMMER 1CH",
-                    "channels": 1,
-                    "type": "light",
-                    "name": "Salon Dimmer"
-                }
+                "device1": [
+                    {
+                        "device_id": "1,10",
+                        "appliance_type": "LIGHT",
+                        "appliance_class": null,
+                        "is_protected": "0",
+                        "gateway": "192.168.1.200",
+                        "channel_number": 1,
+                        "channel_name": "Ana Işık",
+                        "min": "0",
+                        "max": "100",
+                        "settings": ""
+                    }
+                ]
             },
-            "configs": {}
+            "configs": {
+                "lock_module_password": "0000"
+            }
         }
         """
         appliances = {}
+        device_counter = 1
         
         for unique_id, device_info in addon_devices.items():
-            # Extract subnet and device_id
             subnet = device_info.get('subnet')
             device_id = device_info.get('device_id')
             
             if subnet is None or device_id is None:
                 continue
             
-            # Create device key
-            device_key = f"{subnet}_{device_id}"
+            channels = device_info.get('channels', 1)
+            entity_type = device_info.get('entity_type', 'switch').upper()
+            device_name = device_info.get('name', f"TIS {subnet}.{device_id}")
+            channel_names = device_info.get('channel_names', {})
             
-            # Map to integration format
-            appliances[device_key] = {
-                'model': device_info.get('model_name', 'Unknown'),
-                'channels': device_info.get('channels', 1),
-                'type': device_info.get('entity_type', 'switch'),
-                'name': device_info.get('name', f"TIS {device_key}"),
-                'channel_names': device_info.get('channel_names', {}),
-                'initial_states': device_info.get('initial_states', {})
-            }
+            device_key = f"device{device_counter}"
+            device_counter += 1
+            
+            channel_entries = []
+            for ch in range(1, channels + 1):
+                channel_name = channel_names.get(str(ch), f"{device_name} CH{ch}" if channels > 1 else device_name)
+                
+                channel_entries.append({
+                    "device_id": f"{subnet},{device_id}",
+                    "appliance_type": entity_type,
+                    "appliance_class": None,
+                    "is_protected": "0",
+                    "gateway": self.gateway_ip,
+                    "channel_number": ch,
+                    "channel_name": channel_name,
+                    "min": "0",
+                    "max": "100",
+                    "settings": ""
+                })
+            
+            appliances[device_key] = channel_entries
         
-        result = {
+        return {
             'appliances': appliances,
-            'configs': {}
+            'configs': {"lock_module_password": "0000"}
         }
-        
-        logging.info(f"📋 Converted {len(appliances)} devices from addon format")
-        return result
 
     async def save_appliances(self, data: dict, directory: str) -> None:
         """Encrypt and save the data."""
