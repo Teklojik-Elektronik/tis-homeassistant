@@ -347,8 +347,13 @@ class TISHealthSensor(SensorEntity):
             """Handle health sensor feedback event from __init__.py"""
             data = event.data
             
+            # Filter by feedback_type
+            if data.get("feedback_type") != "health_feedback":
+                return
+            
             # Check if event is for this device
-            if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
+            device_id = data.get("device_id")
+            if device_id and device_id[0] == self._subnet and device_id[1] == self._device_id:
                 # Map sensor_key to event data keys
                 # Supports both raw values (ppm/ppb) and state indicators (0-5)
                 # Map sensor_key to raw values
@@ -384,24 +389,8 @@ class TISHealthSensor(SensorEntity):
                         self.async_write_ha_state()
                         _LOGGER.debug(f"Updated {self._attr_name} = {self._attr_native_value} (state={state_value})")
         
-        self._listener = self.hass.bus.async_listen("tis_health_feedback", handle_health_feedback)
-        
-        # Start periodic query (every 30 seconds like original integration)
-        async def periodic_update(now):
-            """Periodic query for health sensor data."""
-            await self.async_update()
-        
-        # Query immediately on startup
-        await self.async_update()
-        
-        # Schedule periodic updates every 30 seconds
-        self._update_unsub = async_track_time_interval(
-            self.hass,
-            periodic_update,
-            timedelta(seconds=30)
-        )
-        
-        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
+        self._listener = self.hass.bus.async_listen(device_id_str, handle_health_feedback)
     
     async def async_update(self) -> None:
         """Query health sensor data - TODO: Migrate to TISControlProtocol"""

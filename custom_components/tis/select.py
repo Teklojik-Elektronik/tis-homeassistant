@@ -135,10 +135,15 @@ class TISSecurityMode(SelectEntity):
             """Handle security feedback from TIS devices."""
             data = event.data
             
+            # Filter by feedback_type
+            if data.get("feedback_type") != "security_feedback":
+                return
+            
             # Check if event is for this device and channel
-            if (data.get("subnet") == self._subnet and 
-                data.get("device") == self._device_id and
-                data.get("channel") == self._channel):
+            device_id = data.get("device_id")
+            if (not device_id or device_id[0] != self._subnet or device_id[1] != self._device_id or
+                data.get("channel") != self._channel):
+                return
                 
                 mode = data.get("mode")
                 if mode in SECURITY_FEEDBACK_OPTIONS:
@@ -147,8 +152,9 @@ class TISSecurityMode(SelectEntity):
                     self.async_write_ha_state()
                     _LOGGER.info(f"🛡️ Security feedback: {self._attr_name} → {option}")
         
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
         self._listener = self.hass.bus.async_listen("admin_lock", handle_admin_lock)
-        self._listener_feedback = self.hass.bus.async_listen("tis_security_feedback", handle_security_feedback)
+        self._listener_feedback = self.hass.bus.async_listen(device_id_str, handle_security_feedback)
         
         # Query initial state
         await self.async_update()

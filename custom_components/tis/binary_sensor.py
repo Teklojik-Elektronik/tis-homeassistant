@@ -182,11 +182,6 @@ class TISBinarySensor(BinarySensorEntity):
         if self._listener:
             self._listener()
             self._listener = None
-        
-        # Remove callback
-        entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-        key = (self._subnet, self._device_id, self._channel)
-        entry_data["update_callbacks"].pop(key, None)
 
     @property
     def is_on(self) -> bool | None:

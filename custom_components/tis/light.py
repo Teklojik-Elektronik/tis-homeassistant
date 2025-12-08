@@ -148,52 +148,60 @@ class TISLight(LightEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to UDP events when added to hass."""
         @callback
-        async def handle_udp_event(event):
-            """Handle UDP packet events."""
-            packet_data = event.data
+        def handle_udp_event(event):
+            """Handle incoming UDP packet events."""
+            data = event.data
             
-            # Check if packet is for this device
-            if (packet_data.get("tgt_subnet") == self._subnet and 
-                packet_data.get("tgt_device") == self._device_id):
+            # Filter by feedback_type
+            feedback_type = data.get("feedback_type")
+            if feedback_type not in ["control_response", "binary_feedback", "update_response"]:
+                return
+            
+            # Check if event is for this device
+            device_id = data.get("device_id")
+            if not device_id or device_id[0] != self._subnet or device_id[1] != self._device_id:
+                return
+            
+            # Extract channel from feedback
+            channel_num = data.get("channel_number")
+            if channel_num != self._channel:
+                return
+            
+            # Parse brightness from response
+            additional_bytes = data.get("additional_bytes", [])
+            
+            if feedback_type == "control_response" and len(additional_bytes) > 2:
+                brightness_raw = int(additional_bytes[2])
+                self._attr_brightness = int((brightness_raw / 100.0) * 255)
+                self._attr_is_on = brightness_raw > 0
+                self.async_write_ha_state()
+            
+            elif feedback_type == "update_response" and len(additional_bytes) > self._channel:
+                brightness_raw = int(additional_bytes[self._channel])
+                self._attr_brightness = int((brightness_raw / 100.0) * 255)
+                self._attr_is_on = brightness_raw > 0
+                self.async_write_ha_state()
+            
+            elif feedback_type == "binary_feedback":
+                # Binary feedback for on/off state
+                from math import ceil
+                from .TISControlProtocol.BytesHelper import int_to_8_bit_binary
                 
-                op_code = packet_data.get("op_code")
-                
-                # OpCode 0x0032: Single channel feedback
-                if op_code == 0x0032:
-                    channel_num = packet_data.get("channel_number")
-                    if channel_num == self._channel:
-                        brightness_raw = packet_data.get("brightness", 0)
-                        # Convert from 0-248 (TIS) to 0-255 (HA)
-                        self._attr_brightness = int((brightness_raw / 248.0) * 255) if brightness_raw > 0 else 0
-                        self._attr_is_on = brightness_raw > 0
-                        self.async_write_ha_state()
-                
-                # OpCode 0x0034: Multi-channel status response
-                elif op_code == 0x0034:
-                    channel_states = packet_data.get("channel_states", {})
-                    if self._channel in channel_states:
-                        brightness_raw = channel_states[self._channel]
-                        self._attr_brightness = int((brightness_raw / 248.0) * 255) if brightness_raw > 0 else 0
-                        self._attr_is_on = brightness_raw > 0
+                if len(additional_bytes) > 0:
+                    channel_count = ceil(additional_bytes[0] / 8)
+                    binary_str = "".join(int_to_8_bit_binary(additional_bytes[i]) for i in range(1, channel_count + 1))
+                    if self._channel <= len(binary_str):
+                        self._attr_is_on = binary_str[self._channel - 1] == "1"
                         self.async_write_ha_state()
         
-        # Register callback
-        entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-        key = (self._subnet, self._device_id, self._channel)
-        entry_data["update_callbacks"][key] = handle_udp_event
-        
-        self._listener = self.hass.bus.async_listen("tis_udp_packet", handle_udp_event)
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
+        self._listener = self.hass.bus.async_listen(device_id_str, handle_udp_event)
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
         if self._listener:
             self._listener()
             self._listener = None
-        
-        # Remove callback
-        entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-        key = (self._subnet, self._device_id, self._channel)
-        entry_data["update_callbacks"].pop(key, None)
 
     @property
     def brightness(self) -> int | None:

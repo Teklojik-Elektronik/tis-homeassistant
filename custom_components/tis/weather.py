@@ -148,7 +148,8 @@ class TISWeatherStation(WeatherEntity):
                 _LOGGER.info(f"☁️ Updated {self._attr_name}: Temp={self._attr_native_temperature}°C, "
                            f"Humidity={self._attr_humidity}%, UV={self._attr_uv_index}")
         
-        self._listener = self.hass.bus.async_listen("tis_weather_feedback", handle_weather_feedback)
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
+        self._listener = self.hass.bus.async_listen(device_id_str, handle_weather_feedback)
         
         # Start periodic updates
         async_track_time_interval(self.hass, self.async_update, self._update_interval)

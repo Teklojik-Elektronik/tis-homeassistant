@@ -250,9 +250,14 @@ class TISClimate(ClimateEntity):
             """Handle Luna temperature (thermostat) feedback event"""
             data = event.data
             
+            # Filter by feedback_type
+            if data.get("feedback_type") != "luna_temp_feedback":
+                return
+            
             # Check if event is for this device
-            if (data.get("subnet") == self._subnet and 
-                data.get("device") == self._device_id):
+            device_id = data.get("device_id")
+            if not device_id or device_id[0] != self._subnet or device_id[1] != self._device_id:
+                return
                 
                 temperature = data.get("temperature")
                 if temperature is not None:
@@ -260,8 +265,9 @@ class TISClimate(ClimateEntity):
                     self.async_write_ha_state()
                     _LOGGER.info(f"Updated {self._attr_name} current temp: {temperature}°C")
         
-        self._listener = self.hass.bus.async_listen("tis_climate_feedback", handle_climate_feedback)
-        self._listener_luna = self.hass.bus.async_listen("tis_luna_temp_feedback", handle_luna_temp_feedback)
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
+        self._listener = self.hass.bus.async_listen(device_id_str, handle_climate_feedback)
+        self._listener_luna = self.hass.bus.async_listen(device_id_str, handle_luna_temp_feedback)
         
         # Query initial state
         await self.async_update()
@@ -541,7 +547,8 @@ class TISFloorHeating(ClimateEntity):
                 self.async_write_ha_state()
                 _LOGGER.info(f"🔥 Updated {self._attr_name}: {self._attr_hvac_mode}, {self._attr_target_temperature}°C")
         
-        self._listener = self.hass.bus.async_listen("tis_floor_feedback", handle_floor_feedback)
+        device_id_str = f"[{self._subnet}, {self._device_id}]"
+        self._listener = self.hass.bus.async_listen(device_id_str, handle_floor_feedback)
         
         # Query initial state
         await self.async_update()
