@@ -488,6 +488,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "temperature": temperature
             })
     
+    async def handle_floor_binary_feedback(parsed: dict, entry_data: dict):
+        """Handle floor heating binary feedback (0x1945) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 6:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            heater_number = data[0]
+            state = data[3]
+            temperature = data[5]
+            
+            _LOGGER.info(f"🔥 Floor binary feedback: {src_subnet}.{src_device} Heater{heater_number} → "
+                        f"{'ON' if state else 'OFF'}, Temp={temperature}°C")
+            
+            # Fire event for climate platform
+            hass.bus.async_fire("tis_floor_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "heater_number": heater_number,
+                "state": state,
+                "temperature": temperature
+            })
+    
+    async def handle_climate_binary_feedback(parsed: dict, entry_data: dict):
+        """Handle climate binary feedback (0xE3D9) - Can include AC or Floor heating"""
+        if len(parsed['additional_data']) >= 3:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Parse based on TISControlProtocol logic
+            first_byte = data[0]
+            
+            # Floor heater number mapping
+            floor_number_map = {0x22: 0, 0x23: 1, 0x24: 2, 0x25: 3}
+            
+            if first_byte in floor_number_map:
+                # Floor heating feedback
+                heater_number = floor_number_map[first_byte]
+                sub_operation = data[1]
+                operation_value = data[2]
+                
+                _LOGGER.info(f"🔥 Floor climate feedback: {src_subnet}.{src_device} Heater{heater_number} → "
+                            f"SubOp={sub_operation}, Value={operation_value}")
+                
+                # Fire event for climate platform
+                hass.bus.async_fire("tis_floor_feedback", {
+                    "subnet": src_subnet,
+                    "device": src_device,
+                    "heater_number": heater_number,
+                    "sub_operation": sub_operation,
+                    "value": operation_value
+                })
+            else:
+                _LOGGER.debug(f"🌡️ Climate binary feedback (not floor): {first_byte:02X}")
+    
     async def handle_analog_feedback(parsed: dict, entry_data: dict):
         """Handle analog sensor feedback (0xEF01) - TISControlProtocol"""
         if len(parsed['additional_data']) >= 1:
@@ -656,9 +712,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 await handle_binary_feedback(parsed, entry_data)
                             elif op_code == 0xDC22:  # Auto binary feedback (RCU devices)
                                 await handle_auto_binary_feedback(parsed, entry_data)
-                            elif op_code == 0x1945:  # Floor heating feedback
-                                await handle_floor_feedback(parsed, entry_data)
-                            elif op_code == 0xE3D9:  # Climate binary feedback
+                            elif op_code == 0x1945:  # Floor heating binary feedback
+                                await handle_floor_binary_feedback(parsed, entry_data)
+                            elif op_code == 0xE3D9:  # Climate binary feedback (includes floor)
                                 await handle_climate_binary_feedback(parsed, entry_data)
                             elif op_code == 0x0031:  # Real-time feedback
                                 await handle_realtime_feedback(parsed, entry_data)

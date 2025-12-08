@@ -1,6 +1,7 @@
 """Support for TIS climate devices (AC, HVAC)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -79,9 +80,11 @@ async def async_setup_entry(
         # Check if device has HVAC/climate support
         platforms = get_device_platforms(model_name)
         hvac_channels = get_platform_channel_count(model_name, "hvac")
+        floor_channels = get_platform_channel_count(model_name, "floor_heating")
         
+        # Create AC entities
         if hvac_channels > 0:
-            _LOGGER.info(f"Creating {hvac_channels} climate entities for {model_name} ({subnet}.{device_id})")
+            _LOGGER.info(f"Creating {hvac_channels} AC climate entities for {model_name} ({subnet}.{device_id})")
             
             for ac_number in range(1, hvac_channels + 1):
                 climate_entity = TISClimate(
@@ -97,6 +100,23 @@ async def async_setup_entry(
                     udp_port,
                 )
                 entities.append(climate_entity)
+        
+        # Create Floor Heating entities
+        if floor_channels > 0:
+            _LOGGER.info(f"Creating {floor_channels} floor heating entities for {model_name} ({subnet}.{device_id})")
+            
+            for heater_number in range(floor_channels):
+                floor_entity = TISFloorHeating(
+                    device_name,
+                    unique_id,
+                    model_name,
+                    subnet,
+                    device_id,
+                    heater_number,
+                    gateway_ip,
+                    udp_port,
+                )
+                entities.append(floor_entity)
     
     if entities:
         async_add_entities(entities)
@@ -410,3 +430,195 @@ class TISClimate(ClimateEntity):
                         f"State={state}, Temp={temperature}°C, Mode={mode}, Fan={fan_speed}")
         except Exception as e:
             _LOGGER.error(f"Error sending AC control: {e}", exc_info=True)
+
+
+class TISFloorHeating(ClimateEntity):
+    """Representation of TIS Floor Heating device."""
+    
+    def __init__(
+        self,
+        device_name: str,
+        unique_id: str,
+        model_name: str,
+        subnet: int,
+        device_id: int,
+        heater_number: int,
+        gateway_ip: str,
+        udp_port: int,
+    ) -> None:
+        """Initialize floor heating entity."""
+        self._subnet = subnet
+        self._device_id = device_id
+        self._heater_number = heater_number
+        self._gateway_ip = gateway_ip
+        self._udp_port = udp_port
+        
+        self._attr_name = f"{device_name} Floor Heater {heater_number + 1}"
+        self._attr_unique_id = f"{unique_id}_floor_{heater_number}"
+        
+        # State
+        self._attr_hvac_mode = HVACMode.OFF
+        self._attr_target_temperature = 24
+        self._attr_current_temperature = None
+        
+        self._listener = None
+        
+        # Device info
+        self._attr_device_info = {
+            "identifiers": {("tis", unique_id)},
+            "name": device_name,
+            "manufacturer": "TIS",
+            "model": model_name,
+        }
+        
+        # Floor heating configuration
+        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
+        self._attr_min_temp = 15
+        self._attr_max_temp = 40
+        self._attr_target_temperature_step = 1
+        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+        self._attr_supported_features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE |
+            ClimateEntityFeature.TURN_OFF |
+            ClimateEntityFeature.TURN_ON
+        )
+    
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to event bus for floor heating feedback."""
+        @callback
+        def handle_floor_feedback(event):
+            """Handle floor heating feedback event from __init__.py"""
+            data = event.data
+            
+            # Check if event is for this device and heater
+            if (data.get("subnet") == self._subnet and 
+                data.get("device") == self._device_id and
+                data.get("heater_number") == self._heater_number):
+                
+                # Update state
+                state = data.get("state")
+                if state == 0:
+                    self._attr_hvac_mode = HVACMode.OFF
+                else:
+                    self._attr_hvac_mode = HVACMode.HEAT
+                
+                # Update temperature
+                temperature = data.get("temperature")
+                if temperature is not None:
+                    self._attr_target_temperature = temperature
+                
+                self.async_write_ha_state()
+                _LOGGER.info(f"🔥 Updated {self._attr_name}: {self._attr_hvac_mode}, {self._attr_target_temperature}°C")
+        
+        self._listener = self.hass.bus.async_listen("tis_floor_feedback", handle_floor_feedback)
+        
+        # Query initial state
+        await self.async_update()
+    
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe when removed."""
+        if self._listener:
+            self._listener()
+            self._listener = None
+    
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set new HVAC mode."""
+        _LOGGER.info(f"{self._attr_name}: Setting HVAC mode to {hvac_mode}")
+        
+        state = 0 if hvac_mode == HVACMode.OFF else 1
+        await self._send_floor_control(state=state, temperature=self._attr_target_temperature)
+        
+        self._attr_hvac_mode = hvac_mode
+        self.async_write_ha_state()
+    
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature."""
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is None:
+            return
+        
+        temperature = int(temperature)
+        _LOGGER.info(f"{self._attr_name}: Setting temperature to {temperature}°C")
+        
+        # If currently OFF, turn on
+        if self._attr_hvac_mode == HVACMode.OFF:
+            self._attr_hvac_mode = HVACMode.HEAT
+        
+        await self._send_floor_control(state=1, temperature=temperature)
+        
+        self._attr_target_temperature = temperature
+        self.async_write_ha_state()
+    
+    async def async_turn_on(self) -> None:
+        """Turn on floor heating."""
+        _LOGGER.info(f"{self._attr_name}: Turning ON")
+        await self.async_set_hvac_mode(HVACMode.HEAT)
+    
+    async def async_turn_off(self) -> None:
+        """Turn off floor heating."""
+        _LOGGER.info(f"{self._attr_name}: Turning OFF")
+        await self.async_set_hvac_mode(HVACMode.OFF)
+    
+    async def async_update(self) -> None:
+        """Query device state."""
+        try:
+            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
+            
+            # Create floor update query packet (0x1944)
+            packet_obj = TISPacket.create_floor_heating_query_packet(
+                self._subnet,
+                self._device_id,
+                self._heater_number
+            )
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+            
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect()
+            client.send_to(full_packet, self._gateway_ip)
+            client.close()
+            
+            _LOGGER.debug(f"🔥 Queried floor heater {self._subnet}.{self._device_id} Heater{self._heater_number}")
+        except Exception as e:
+            _LOGGER.error(f"Error querying floor heater: {e}", exc_info=True)
+    
+    async def _send_floor_control(self, state: int, temperature: int) -> None:
+        """Send floor heating control command."""
+        try:
+            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
+            
+            # Send power command (0xE3D8 - power action)
+            packet_obj = TISPacket.create_floor_heating_control_packet(
+                self._subnet,
+                self._device_id,
+                self._heater_number,
+                action='power',
+                value=state
+            )
+            tis_data = packet_obj.build()
+            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+            
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect()
+            client.send_to(full_packet, self._gateway_ip)
+            
+            # If turning on, also send temperature command
+            if state == 1:
+                await asyncio.sleep(0.1)  # Small delay between commands
+                packet_obj = TISPacket.create_floor_heating_control_packet(
+                    self._subnet,
+                    self._device_id,
+                    self._heater_number,
+                    action='temperature',
+                    value=temperature
+                )
+                tis_data = packet_obj.build()
+                full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
+                client.send_to(full_packet, self._gateway_ip)
+            
+            client.close()
+            
+            _LOGGER.info(f"🔥 Sent floor control to {self._subnet}.{self._device_id} Heater{self._heater_number}: "
+                        f"State={state}, Temp={temperature}°C")
+        except Exception as e:
+            _LOGGER.error(f"Error sending floor control: {e}", exc_info=True)
