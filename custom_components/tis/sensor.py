@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import timedelta
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -20,6 +21,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN, HEALTH_SENSOR_TYPES, ENERGY_SENSOR_TYPES
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
@@ -278,6 +280,23 @@ class TISHealthSensor(SensorEntity):
                         _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
         
         self._listener = self.hass.bus.async_listen("tis_health_feedback", handle_health_feedback)
+        
+        # Start periodic query (every 30 seconds like original integration)
+        async def periodic_update(now):
+            """Periodic query for health sensor data."""
+            await self.async_update()
+        
+        # Query immediately on startup
+        await self.async_update()
+        
+        # Schedule periodic updates every 30 seconds
+        self._update_unsub = async_track_time_interval(
+            self.hass,
+            periodic_update,
+            timedelta(seconds=30)
+        )
+        
+        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
     
     async def async_update(self) -> None:
         """Query health sensor data using OpCode 0x2024"""
@@ -303,6 +322,11 @@ class TISHealthSensor(SensorEntity):
         if self._listener:
             self._listener()
             self._listener = None
+        
+        # Cancel periodic updates
+        if hasattr(self, '_update_unsub') and self._update_unsub:
+            self._update_unsub()
+            self._update_unsub = None
 
 
 class TISEnergySensor(SensorEntity):
@@ -398,6 +422,23 @@ class TISEnergySensor(SensorEntity):
                         _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
         
         self._listener = self.hass.bus.async_listen("tis_energy_feedback", handle_energy_feedback)
+        
+        # Start periodic query (every 30 seconds like original integration)
+        async def periodic_update(now):
+            """Periodic query for energy meter data."""
+            await self.async_update()
+        
+        # Query immediately on startup
+        await self.async_update()
+        
+        # Schedule periodic updates every 30 seconds
+        self._update_unsub = async_track_time_interval(
+            self.hass,
+            periodic_update,
+            timedelta(seconds=30)
+        )
+        
+        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
     
     async def async_update(self) -> None:
         """Query energy meter data using OpCode 0x2010"""
@@ -423,3 +464,8 @@ class TISEnergySensor(SensorEntity):
         if self._listener:
             self._listener()
             self._listener = None
+        
+        # Cancel periodic updates
+        if hasattr(self, '_update_unsub') and self._update_unsub:
+            self._update_unsub()
+            self._update_unsub = None
