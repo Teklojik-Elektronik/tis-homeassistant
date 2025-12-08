@@ -175,51 +175,129 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.error(f"Error parsing health sensor data from {src_subnet}.{src_device}: {e}", exc_info=True)
     
     async def handle_energy_feedback(parsed: dict, entry_data: dict):
-        """Handle energy meter feedback (0x2010)"""
-        if len(parsed['additional_data']) >= 8:
+        """Handle energy meter feedback (0x2011) - TISControlProtocol with 3-phase support"""
+        if len(parsed['additional_data']) >= 2:
             src_subnet = parsed['src_subnet']
             src_device = parsed['src_device']
             data = parsed['additional_data']
             
             channel = data[0] + 1  # Convert 0-based to 1-based
-            voltage = int.from_bytes(data[1:3], 'big') / 10.0
-            current = int.from_bytes(data[3:5], 'big') / 1000.0
-            power = int.from_bytes(data[5:7], 'big')
-            energy = int.from_bytes(data[7:9], 'big') / 100.0
+            sub_operation = data[1]
             
-            _LOGGER.info(f"⚡ Energy meter: {src_subnet}.{src_device} CH{channel} → "
-                        f"V={voltage}V, I={current}A, P={power}W, E={energy}kWh")
+            try:
+                if sub_operation == 0xDA:  # Monthly energy
+                    if len(data) >= 18:
+                        energy = int.from_bytes(data[16:18], 'big')
+                        
+                        _LOGGER.info(f"⚡ Monthly energy: {src_subnet}.{src_device} CH{channel} → {energy} kWh")
+                        
+                        hass.bus.async_fire("tis_energy_feedback", {
+                            "subnet": src_subnet,
+                            "device": src_device,
+                            "channel": channel,
+                            "feedback_type": "monthly_energy",
+                            "energy": energy
+                        })
+                
+                elif sub_operation == 0x65:  # Real-time 3-phase energy (MET-EN-3PH)
+                    if len(data) >= 147:
+                        import struct
+                        
+                        def big_endian_to_float(bytes_data):
+                            return round(struct.unpack('>f', bytes(bytes_data))[0], 1)
+                        
+                        energy_data = {
+                            "v1": big_endian_to_float(data[3:7]),
+                            "v2": big_endian_to_float(data[7:11]),
+                            "v3": big_endian_to_float(data[11:15]),
+                            "current_p1": big_endian_to_float(data[15:19]),
+                            "current_p2": big_endian_to_float(data[19:23]),
+                            "current_p3": big_endian_to_float(data[23:27]),
+                            "active_p1": big_endian_to_float(data[27:31]),
+                            "active_p2": big_endian_to_float(data[31:35]),
+                            "active_p3": big_endian_to_float(data[35:39]),
+                            "apparent1": big_endian_to_float(data[39:43]),
+                            "apparent2": big_endian_to_float(data[43:47]),
+                            "apparent3": big_endian_to_float(data[47:51]),
+                            "reactive1": big_endian_to_float(data[51:55]),
+                            "reactive2": big_endian_to_float(data[55:59]),
+                            "reactive3": big_endian_to_float(data[59:63]),
+                            "pf1": big_endian_to_float(data[63:67]),
+                            "pf2": big_endian_to_float(data[67:71]),
+                            "pf3": big_endian_to_float(data[71:75]),
+                            "pa1": big_endian_to_float(data[75:79]),
+                            "pa2": big_endian_to_float(data[79:83]),
+                            "pa3": big_endian_to_float(data[83:87]),
+                            "avg_voltage": big_endian_to_float(data[87:91]),
+                            "avg_current": big_endian_to_float(data[91:95]),
+                            "sum_current": big_endian_to_float(data[95:99]),
+                            "total_power": big_endian_to_float(data[107:111]),
+                            "total_volt_amps": big_endian_to_float(data[115:119]),
+                            "total_var": big_endian_to_float(data[123:127]),
+                            "total_pf": big_endian_to_float(data[127:131]),
+                            "total_pa": big_endian_to_float(data[135:139]),
+                            "frequency": big_endian_to_float(data[143:147]),
+                        }
+                        
+                        _LOGGER.info(f"⚡ 3-Phase energy: {src_subnet}.{src_device} CH{channel} → "
+                                    f"V1={energy_data['v1']}V, V2={energy_data['v2']}V, V3={energy_data['v3']}V, "
+                                    f"P={energy_data['total_power']}W, Freq={energy_data['frequency']}Hz")
+                        
+                        hass.bus.async_fire("tis_energy_feedback", {
+                            "subnet": src_subnet,
+                            "device": src_device,
+                            "channel": channel,
+                            "feedback_type": "energy_3phase",
+                            "energy": energy_data
+                        })
+                
+                else:  # Simple energy format (fallback)
+                    if len(data) >= 9:
+                        voltage = int.from_bytes(data[2:4], 'big') / 10.0
+                        current = int.from_bytes(data[4:6], 'big') / 1000.0
+                        power = int.from_bytes(data[6:8], 'big')
+                        energy = int.from_bytes(data[8:10], 'big') / 100.0 if len(data) >= 10 else 0
+                        
+                        _LOGGER.info(f"⚡ Energy meter: {src_subnet}.{src_device} CH{channel} → "
+                                    f"V={voltage}V, I={current}A, P={power}W, E={energy}kWh")
+                        
+                        hass.bus.async_fire("tis_energy_feedback", {
+                            "subnet": src_subnet,
+                            "device": src_device,
+                            "channel": channel,
+                            "feedback_type": "energy_simple",
+                            "voltage": voltage,
+                            "current": current,
+                            "power": power,
+                            "energy": energy
+                        })
             
-            # Fire event for sensor platform
-            hass.bus.async_fire("tis_energy_feedback", {
-                "subnet": src_subnet,
-                "device": src_device,
-                "channel": channel,
-                "voltage": voltage,
-                "current": current,
-                "power": power,
-                "energy": energy
-            })
+            except Exception as e:
+                _LOGGER.error(f"Error parsing energy data: {e}", exc_info=True)
     
     async def handle_climate_feedback(parsed: dict, entry_data: dict):
-        """Handle AC/climate feedback (0xE0EC)"""
+        """Handle AC/climate feedback (0xE0EF / 0xE0ED) - TISControlProtocol compatible"""
         if len(parsed['additional_data']) >= 5:
             src_subnet = parsed['src_subnet']
             src_device = parsed['src_device']
             data = parsed['additional_data']
             
-            ac_number = data[0]
-            state = data[1]  # 0=OFF, 1=ON
-            temperature = data[2]
-            mode_and_fan = data[3]
-            mode = (mode_and_fan >> 4) & 0x0F
-            fan_speed = mode_and_fan & 0x0F
+            ac_number = data[1]  # AC number (0-31 for TIS-VRF-AC)
+            state = data[2]  # 0=OFF, 1=ON
+            cool_temp = data[3]
+            mode_and_fan = data[4]
+            mode = (mode_and_fan >> 4) & 0x0F  # Upper 4 bits
+            fan_speed = mode_and_fan & 0x0F    # Lower 4 bits
             
-            mode_names = {0: "Cool", 1: "Heat", 2: "Fan", 3: "Auto"}
+            # Optional heat and auto temperatures
+            heat_temp = data[7] if len(data) > 7 else cool_temp
+            auto_temp = data[9] if len(data) > 9 else cool_temp
+            
+            mode_names = {0: "Cool", 1: "Heat", 2: "Fan", 3: "Auto", 4: "Dry"}
             fan_names = {0: "Auto", 1: "High", 2: "Medium", 3: "Low"}
             
             _LOGGER.info(f"❄️ AC feedback: {src_subnet}.{src_device} AC{ac_number} → "
-                        f"{'ON' if state else 'OFF'}, {temperature}°C, "
+                        f"{'ON' if state else 'OFF'}, Cool={cool_temp}°C, Heat={heat_temp}°C, "
                         f"Mode={mode_names.get(mode, 'Unknown')}, "
                         f"Fan={fan_names.get(fan_speed, 'Unknown')}")
             
@@ -229,13 +307,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "device": src_device,
                 "ac_number": ac_number,
                 "state": state,
-                "temperature": temperature,
+                "cool_temp": cool_temp,
+                "heat_temp": heat_temp,
+                "auto_temp": auto_temp,
                 "mode": mode,
                 "fan_speed": fan_speed
             })
     
     async def handle_security_feedback(parsed: dict, entry_data: dict):
-        """Handle security status feedback (0x011E)"""
+        """Handle security status feedback (0x011F / 0x0105) - TISControlProtocol compatible"""
         if len(parsed['additional_data']) >= 2:
             src_subnet = parsed['src_subnet']
             src_device = parsed['src_device']
@@ -256,6 +336,236 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "channel": channel,
                 "mode": mode
             })
+    
+    async def handle_binary_feedback(parsed: dict, entry_data: dict):
+        """Handle binary sensor feedback (0xEFFF) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 1:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Remove auxiliary bytes (number of scenarios)
+            len_aux = data[0]
+            binary_data = data[len_aux + 1:] if len(data) > len_aux else []
+            
+            _LOGGER.info(f"🚪 Binary sensor feedback: {src_subnet}.{src_device} → "
+                        f"{len(binary_data)} states: {binary_data[:10]}...")
+            
+            # Fire event for binary_sensor platform
+            hass.bus.async_fire("tis_binary_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "binary_states": binary_data
+            })
+    
+    async def handle_auto_binary_feedback(parsed: dict, entry_data: dict):
+        """Handle auto binary feedback (0xDC22) - RCU devices - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 1:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            _LOGGER.info(f"🔄 Auto binary feedback: {src_subnet}.{src_device} → "
+                        f"{len(data)} bytes: {data[:10]}...")
+            
+            # Fire event for binary_sensor platform
+            hass.bus.async_fire("tis_auto_binary_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "binary_states": data
+            })
+    
+    async def handle_floor_feedback(parsed: dict, entry_data: dict):
+        """Handle floor heating feedback (0x1945) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 3:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Floor number mapping from TISControlProtocol
+            FLOOR_NUMBER_MAP = {0x22: 0, 0x23: 1, 0x24: 2, 0x25: 3}
+            
+            if data[0] == 0x2E:  # Multi-floor format
+                floor_number = data[1] - 1
+                sub_operation = data[2]
+                operation_value = data[3] if len(data) > 3 else 0
+            else:
+                floor_number = FLOOR_NUMBER_MAP.get(data[0], 0)
+                sub_operation = data[1]
+                operation_value = data[2]
+            
+            _LOGGER.info(f"🔥 Floor heating feedback: {src_subnet}.{src_device} Floor{floor_number} → "
+                        f"SubOp=0x{sub_operation:02X}, Value={operation_value}")
+            
+            # Fire event for climate platform (floor heating)
+            hass.bus.async_fire("tis_floor_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "floor_number": floor_number,
+                "sub_operation": sub_operation,
+                "operation_value": operation_value
+            })
+    
+    async def handle_climate_binary_feedback(parsed: dict, entry_data: dict):
+        """Handle climate binary feedback (0xE3D9) - AC/Floor control - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 3:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # AC/Floor number detection
+            AC_NUMBER_MAP = {0x19: 0, 0x1A: 1, 0x1B: 2, 0x1C: 3, 0x1D: 4, 0x1E: 5, 0x1F: 6, 0x20: 7}
+            FLOOR_NUMBER_MAP = {0x22: 0, 0x23: 1, 0x24: 2, 0x25: 3}
+            
+            if data[0] <= 0x18:
+                sub_operation = data[0]
+                operation_value = data[1]
+                feedback_type = "ac_feedback" if data[0] < 0x14 else "floor_feedback"
+                number = 0
+            elif data[0] == 0x2E:
+                number = data[1] - 1
+                sub_operation = 0x14 if data[2] == 0x03 else 0x18 if data[2] == 0x04 else data[2]
+                operation_value = data[3] if len(data) > 3 else 0
+                feedback_type = "floor_feedback"
+            else:
+                ac_number = AC_NUMBER_MAP.get(data[0])
+                floor_number = FLOOR_NUMBER_MAP.get(data[0])
+                sub_operation = data[1]
+                operation_value = data[2]
+                
+                if ac_number is not None:
+                    feedback_type = "ac_feedback"
+                    number = ac_number
+                else:
+                    feedback_type = "floor_feedback"
+                    number = floor_number
+            
+            _LOGGER.info(f"🌡️ Climate binary feedback: {src_subnet}.{src_device} {feedback_type} #{number} → "
+                        f"SubOp=0x{sub_operation:02X}, Value={operation_value}")
+            
+            hass.bus.async_fire(f"tis_{feedback_type}", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "number": number,
+                "sub_operation": sub_operation,
+                "operation_value": operation_value
+            })
+    
+    async def handle_realtime_feedback(parsed: dict, entry_data: dict):
+        """Handle real-time feedback (0x0031) - TISControlProtocol"""
+        src_subnet = parsed['src_subnet']
+        src_device = parsed['src_device']
+        data = parsed['additional_data']
+        
+        _LOGGER.debug(f"⚡ Real-time feedback: {src_subnet}.{src_device} → {len(data)} bytes")
+        
+        # Fire generic event
+        hass.bus.async_fire("tis_realtime_feedback", {
+            "subnet": src_subnet,
+            "device": src_device,
+            "data": data
+        })
+    
+    async def handle_luna_temp_feedback(parsed: dict, entry_data: dict):
+        """Handle Luna temperature feedback (0xE3E8) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 2:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            temperature = int(data[1])
+            
+            _LOGGER.info(f"🌡️ Luna temp: {src_subnet}.{src_device} → {temperature}°C")
+            
+            # Fire event for sensor platform
+            hass.bus.async_fire("tis_luna_temp_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "temperature": temperature
+            })
+    
+    async def handle_analog_feedback(parsed: dict, entry_data: dict):
+        """Handle analog sensor feedback (0xEF01) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 1:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            channels_num = int(data[0])
+            analog_values = list(data[1:channels_num + 1]) if len(data) > channels_num else []
+            
+            _LOGGER.info(f"📊 Analog sensor: {src_subnet}.{src_device} → {channels_num} channels: {analog_values}")
+            
+            # Fire event for sensor platform
+            hass.bus.async_fire("tis_analog_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "channels": channels_num,
+                "analog_values": analog_values
+            })
+    
+    async def handle_weather_feedback(parsed: dict, entry_data: dict):
+        """Handle weather station feedback (0x2021) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 24:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Wind direction mapping
+            wind_direction_map = {
+                0x01: "north", 0x02: "north east", 0x04: "east", 0x08: "south east",
+                0x10: "south", 0x20: "south west", 0x40: "west", 0x80: "north west"
+            }
+            
+            try:
+                import struct
+                
+                def big_endian_to_float(bytes_data):
+                    return struct.unpack('>f', bytes(bytes_data))[0]
+                
+                wind_direction = wind_direction_map.get(int(data[3]), "unknown")
+                temperature = big_endian_to_float(data[4:8])
+                humidity = int(data[8])
+                wind_speed = big_endian_to_float(data[9:13])
+                gust_speed = big_endian_to_float(data[13:17])
+                rainfall = int.from_bytes(data[17:19], 'big')
+                lighting = big_endian_to_float(data[19:23])
+                uv = int(data[23])
+                
+                _LOGGER.info(f"🌤️ Weather station: {src_subnet}.{src_device} → "
+                            f"Temp={temperature:.1f}°C, Humidity={humidity}%, "
+                            f"Wind={wind_speed:.1f}m/s {wind_direction}, UV={uv}")
+                
+                # Fire event for weather sensor platform
+                hass.bus.async_fire("tis_weather_feedback", {
+                    "subnet": src_subnet,
+                    "device": src_device,
+                    "wind_direction": wind_direction,
+                    "temperature": temperature,
+                    "humidity": humidity,
+                    "wind_speed": wind_speed,
+                    "gust_speed": gust_speed,
+                    "rainfall": rainfall,
+                    "lighting": lighting,
+                    "uv": uv
+                })
+            except Exception as e:
+                _LOGGER.error(f"Error parsing weather data: {e}")
+    
+    async def handle_discovery_feedback(parsed: dict, entry_data: dict):
+        """Handle discovery response (0x000F) - TISControlProtocol"""
+        src_subnet = parsed['src_subnet']
+        src_device = parsed['src_device']
+        data = parsed['additional_data']
+        
+        _LOGGER.info(f"🔍 Discovery response: {src_subnet}.{src_device} → {len(data)} bytes")
+        
+        # Fire discovery event
+        hass.bus.async_fire("tis_discovery_feedback", {
+            "subnet": src_subnet,
+            "device": src_device,
+            "data": data
+        })
     
     async def udp_listener():
         """Listen for TIS UDP packets and update entity states."""
@@ -319,20 +629,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         
                         _LOGGER.info(f"✅ Parsed: OpCode 0x{op_code:04X} from {src_subnet}.{src_device}")
                         
-                        # OpCode-based dispatch system (TISControlProtocol style)
+                        # OpCode-based dispatch system (TISControlProtocol compatible)
                         try:
                             if op_code == 0x0032:  # Control response
                                 await handle_control_response(parsed, entry_data)
-                            elif op_code == 0x0034:  # Multi-channel status
+                            elif op_code == 0x0034:  # Multi-channel status update
                                 await handle_update_response(parsed, entry_data)
-                            elif op_code == 0x2024:  # Health sensor feedback
+                            elif op_code == 0x2025:  # Health sensor feedback (CORRECTED from 0x2024)
                                 await handle_health_feedback(parsed, entry_data)
-                            elif op_code == 0x2010:  # Energy meter feedback
+                            elif op_code == 0x2011:  # Energy meter feedback (CORRECTED from 0x2010)
                                 await handle_energy_feedback(parsed, entry_data)
-                            elif op_code == 0xE0EC:  # AC/climate feedback
+                            elif op_code == 0xE0EF:  # AC/climate feedback (CORRECTED from 0xE0EC)
                                 await handle_climate_feedback(parsed, entry_data)
-                            elif op_code == 0x011E:  # Security feedback
+                            elif op_code == 0xE0ED:  # AC/climate feedback (alternative)
+                                await handle_climate_feedback(parsed, entry_data)
+                            elif op_code == 0x011F:  # Security update feedback (CORRECTED from 0x011E)
                                 await handle_security_feedback(parsed, entry_data)
+                            elif op_code == 0x0105:  # Security control feedback
+                                await handle_security_feedback(parsed, entry_data)
+                            elif op_code == 0xEFFF:  # Binary sensor feedback
+                                await handle_binary_feedback(parsed, entry_data)
+                            elif op_code == 0xDC22:  # Auto binary feedback (RCU devices)
+                                await handle_auto_binary_feedback(parsed, entry_data)
+                            elif op_code == 0x1945:  # Floor heating feedback
+                                await handle_floor_feedback(parsed, entry_data)
+                            elif op_code == 0xE3D9:  # Climate binary feedback
+                                await handle_climate_binary_feedback(parsed, entry_data)
+                            elif op_code == 0x0031:  # Real-time feedback
+                                await handle_realtime_feedback(parsed, entry_data)
+                            elif op_code == 0xE3E8:  # Luna temperature feedback
+                                await handle_luna_temp_feedback(parsed, entry_data)
+                            elif op_code == 0xEF01:  # Analog sensor feedback
+                                await handle_analog_feedback(parsed, entry_data)
+                            elif op_code == 0x2021:  # Weather station feedback
+                                await handle_weather_feedback(parsed, entry_data)
+                            elif op_code == 0x000F:  # Discovery response
+                                await handle_discovery_feedback(parsed, entry_data)
                             else:
                                 _LOGGER.debug(f"Unhandled OpCode: 0x{op_code:04X}")
                         except Exception as e:
