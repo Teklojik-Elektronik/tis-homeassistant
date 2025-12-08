@@ -278,8 +278,11 @@ class TISHealthSensor(SensorEntity):
         
         self._attr_name = f"{device_name} {sensor_name}"
         self._attr_unique_id = f"{unique_id}_health_{sensor_key}"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_value = None
+        
+        # Set state_class for measurement sensors only (not for state indicators)
+        if sensor_key not in ["eco2_state", "tvoc_state", "co_state"]:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         
         # Set device class and unit based on sensor type (TISControlProtocol format)
         if sensor_key == "temp":
@@ -288,16 +291,26 @@ class TISHealthSensor(SensorEntity):
         elif sensor_key == "humidity":
             self._attr_device_class = SensorDeviceClass.HUMIDITY
             self._attr_native_unit_of_measurement = PERCENTAGE
-        elif sensor_key == "eco2_state":
+        elif sensor_key == "eco2":
             self._attr_device_class = SensorDeviceClass.CO2
             self._attr_native_unit_of_measurement = "ppm"
             self._attr_icon = "mdi:molecule-co2"
-        elif sensor_key == "tvoc_state":
+        elif sensor_key == "tvoc":
+            self._attr_device_class = SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS
             self._attr_native_unit_of_measurement = "ppb"
             self._attr_icon = "mdi:air-filter"
-        elif sensor_key == "co_state":
+        elif sensor_key == "co":
             self._attr_device_class = SensorDeviceClass.CO
             self._attr_native_unit_of_measurement = "ppm"
+            self._attr_icon = "mdi:molecule-co"
+        elif sensor_key == "eco2_state":
+            self._attr_native_unit_of_measurement = None
+            self._attr_icon = "mdi:molecule-co2"
+        elif sensor_key == "tvoc_state":
+            self._attr_native_unit_of_measurement = None
+            self._attr_icon = "mdi:air-filter"
+        elif sensor_key == "co_state":
+            self._attr_native_unit_of_measurement = None
             self._attr_icon = "mdi:molecule-co"
         elif sensor_key == "lux":
             self._attr_device_class = SensorDeviceClass.ILLUMINANCE
@@ -325,17 +338,19 @@ class TISHealthSensor(SensorEntity):
             
             # Check if event is for this device
             if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
-                # Map sensor_key (with _state suffix) to event data keys
-                # const.py uses: eco2_state, tvoc_state, co_state
-                # Event data has: eco2, tvoc, co, eco2_state, tvoc_state, co_state
+                # Map sensor_key to event data keys
+                # Supports both raw values (ppm/ppb) and state indicators (0-5)
                 value_map = {
                     "temp": data.get("temperature"),
                     "humidity": data.get("humidity"),
-                    "eco2_state": data.get("eco2_state"),    # State value (0-5)
-                    "tvoc_state": data.get("tvoc_state"),    # State value (0-5)
-                    "co_state": data.get("co_state"),        # State value (0-5)
                     "lux": data.get("lux"),
-                    "noise": data.get("noise")
+                    "noise": data.get("noise"),
+                    "eco2": data.get("eco2"),              # Raw eCO2 (ppm)
+                    "tvoc": data.get("tvoc"),              # Raw TVOC (ppb)
+                    "co": data.get("co"),                  # Raw CO (ppm)
+                    "eco2_state": data.get("eco2_state"),  # State (0-5)
+                    "tvoc_state": data.get("tvoc_state"),  # State (0-5)
+                    "co_state": data.get("co_state"),      # State (0-5)
                 }
                 
                 if self._sensor_key in value_map:

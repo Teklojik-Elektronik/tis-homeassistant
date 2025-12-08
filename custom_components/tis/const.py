@@ -359,14 +359,18 @@ ENERGY_SENSOR_TYPES = {
 }
 
 # Health Sensor Types
+# Includes both raw sensor values (ppm/ppb) and state indicators (0-5)
 HEALTH_SENSOR_TYPES = {
-    "noise": "Noise Sensor",
-    "eco2_state": "ECO2 Sensor",
-    "tvoc_state": "TVOC Sensor",
-    "humidity": "Humidity Sensor",
-    "co_state": "CO Sensor",
-    "lux": "Lux Sensor",
     "temp": "Temperature Sensor",
+    "humidity": "Humidity Sensor",
+    "lux": "Lux Sensor",
+    "noise": "Noise Sensor",
+    "eco2": "eCO2 Sensor",              # Raw eCO2 value (ppm)
+    "tvoc": "TVOC Sensor",              # Raw TVOC value (ppb)
+    "co": "CO Sensor",                  # Raw CO value (ppm)
+    "eco2_state": "eCO2 State",         # eCO2 quality state (0-5)
+    "tvoc_state": "TVOC State",         # TVOC quality state (0-5)
+    "co_state": "CO State",             # CO quality state (0-5)
 }
 
 # Health Sensor States
