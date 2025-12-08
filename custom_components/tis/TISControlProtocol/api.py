@@ -298,7 +298,24 @@ class TISApi:
         return entities
 
     async def read_appliances(self, directory: str) -> dict:
-        """Read, decrypt, and return the stored data."""
+        """Read device data from tis_devices.json (addon format) or app.json (legacy)."""
+        
+        # Priority 1: Try tis_devices.json (from addon)
+        tis_devices_file = "/config/tis_devices.json"
+        try:
+            async with aiofiles.open(tis_devices_file, "r") as f:
+                raw_data = await f.read()
+                if raw_data:
+                    devices = json.loads(raw_data)
+                    logging.info(f"✅ Loaded {len(devices)} devices from {tis_devices_file}")
+                    # Convert addon format to integration format
+                    return self._convert_addon_format(devices)
+        except FileNotFoundError:
+            logging.debug(f"tis_devices.json not found, trying legacy app.json")
+        except Exception as e:
+            logging.error(f"❌ Error reading tis_devices.json: {e}")
+        
+        # Priority 2: Fallback to app.json (encrypted legacy format)
         file_name = "app.json"
         output_file = os.path.join(directory, file_name)
 
@@ -309,17 +326,78 @@ class TISApi:
                 if raw_data:
                     encrypted_data = json.loads(raw_data)
                     data = self.decrypt_data(encrypted_data)
-                    logging.info(f"✅ Successfully loaded and decrypted appliance data")
+                    logging.info(f"✅ Successfully loaded and decrypted appliance data from app.json")
                 else:
                     logging.warning(f"⚠️ app.json is empty")
                     data = {}
         except FileNotFoundError:
-            logging.warning(f"⚠️ app.json not found at {output_file} - create it or configure devices first")
+            logging.warning(f"⚠️ No device configuration found. Please use TIS addon to scan and add devices: http://homeassistant.local:8888")
             data = {}
         except Exception as e:
             logging.error(f"❌ Error reading app.json: {e}")
             data = {}
         return data
+    
+    def _convert_addon_format(self, addon_devices: dict) -> dict:
+        """Convert addon device format to integration format.
+        
+        Addon format:
+        {
+            "tis_1_10": {
+                "subnet": 1,
+                "device_id": 10,
+                "model_name": "DALI DIMMER 1CH",
+                "channels": 1,
+                "name": "Salon Dimmer",
+                "entity_type": "light",
+                "channel_names": {},
+                "initial_states": {}
+            }
+        }
+        
+        Integration format:
+        {
+            "appliances": {
+                "1_10": {
+                    "model": "DALI DIMMER 1CH",
+                    "channels": 1,
+                    "type": "light",
+                    "name": "Salon Dimmer"
+                }
+            },
+            "configs": {}
+        }
+        """
+        appliances = {}
+        
+        for unique_id, device_info in addon_devices.items():
+            # Extract subnet and device_id
+            subnet = device_info.get('subnet')
+            device_id = device_info.get('device_id')
+            
+            if subnet is None or device_id is None:
+                continue
+            
+            # Create device key
+            device_key = f"{subnet}_{device_id}"
+            
+            # Map to integration format
+            appliances[device_key] = {
+                'model': device_info.get('model_name', 'Unknown'),
+                'channels': device_info.get('channels', 1),
+                'type': device_info.get('entity_type', 'switch'),
+                'name': device_info.get('name', f"TIS {device_key}"),
+                'channel_names': device_info.get('channel_names', {}),
+                'initial_states': device_info.get('initial_states', {})
+            }
+        
+        result = {
+            'appliances': appliances,
+            'configs': {}
+        }
+        
+        logging.info(f"📋 Converted {len(appliances)} devices from addon format")
+        return result
 
     async def save_appliances(self, data: dict, directory: str) -> None:
         """Encrypt and save the data."""
