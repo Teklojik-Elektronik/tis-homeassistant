@@ -24,9 +24,12 @@ PLATFORMS: list[Platform] = [
     Platform.LIGHT,
     Platform.BINARY_SENSOR,
     Platform.SENSOR,
-    Platform.CLIMATE,  # AC/HVAC control ✅
+    Platform.CLIMATE,  # AC/HVAC control + Floor Heating ✅
     Platform.COVER,    # Curtain/Blind control ✅
     Platform.FAN,      # Fan speed control ✅
+    Platform.BUTTON,   # Universal Switch ✅
+    Platform.LOCK,     # Admin Lock ✅
+    Platform.SELECT,   # Security Mode ✅
 ]
 DEVICES_FILE = "/config/tis_devices.json"
 

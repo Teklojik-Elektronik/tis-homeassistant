@@ -227,6 +227,7 @@ DEVICE_APPLIANCE_MAPPING = {
     "TIS-VRF-AC": {"ac": 32},
     "TIS-SEC-PRO": {"security": 1},
     "TIS-22DI-DIN": {"binary_sensor": 22},
+    "TIS-UNIVERSAL-SW": {"universal_switch": 1},  # Universal Switch Button
     
     # Saturn Series
     "TIS-SAT-PAD": {},
@@ -334,9 +335,10 @@ APPLIANCE_TO_HA_PLATFORM = {
     "motor": "cover",
     "curtain": "cover",
     "binary_sensor": "binary_sensor",
-    "security": "binary_sensor",  # + alarm_control_panel
+    "security": "select",  # Security mode selection
     "analog_sensor": "sensor",
     "energy_sensor": "sensor",
+    "universal_switch": "button",  # Button platform
     "universal_switch": "switch",
     "health_sensor": "sensor",
     "lux_sensor": "sensor",

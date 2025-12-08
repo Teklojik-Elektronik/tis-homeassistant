@@ -485,3 +485,56 @@ class TISUDPClient:
         if self.sock:
             self.sock.close()
             self.is_connected = False
+    
+    @staticmethod
+    def create_universal_switch_packet(subnet: int, device: int, channel: int, universal_type: int) -> 'TISPacket':
+        """
+        Universal Switch paketi (0xE01C)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+            universal_type: Universal type değeri (0-255)
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_UNIVERSAL_SWITCH
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel, universal_type])
+        return packet
+    
+    @staticmethod
+    def create_security_control_packet(subnet: int, device: int, channel: int, mode: int) -> 'TISPacket':
+        """
+        Güvenlik modu kontrol paketi (0x0104)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+            mode: 1=Vacation, 2=Away, 3=Night, 6=Disarm
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_CONTROL_SECURITY
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel, mode])
+        return packet
+    
+    @staticmethod
+    def create_security_query_packet(subnet: int, device: int, channel: int) -> 'TISPacket':
+        """
+        Güvenlik durumu sorgulama paketi (0x011E)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_SECURITY_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel])
+        return packet
