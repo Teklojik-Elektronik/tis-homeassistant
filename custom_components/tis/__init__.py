@@ -30,6 +30,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,   # Universal Switch ✅
     Platform.LOCK,     # Admin Lock ✅
     Platform.SELECT,   # Security Mode ✅
+    Platform.WEATHER,  # Weather Station ✅
 ]
 DEVICES_FILE = "/config/tis_devices.json"
 
@@ -489,6 +490,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "subnet": src_subnet,
                 "device": src_device,
                 "temperature": temperature
+            })
+    
+    async def handle_weather_feedback(parsed: dict, entry_data: dict):
+        """Handle weather station feedback (0x2021) - TISControlProtocol"""
+        if len(parsed['additional_data']) >= 10:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Parse weather data (byte structure from TISControlProtocol)
+            temperature = int(data[0]) if len(data) > 0 else None
+            humidity = int(data[1]) if len(data) > 1 else None
+            uv_index = float(data[2]) if len(data) > 2 else None
+            wind_speed = int(data[3]) if len(data) > 3 else None
+            wind_bearing = int(data[4]) if len(data) > 4 else None
+            pressure = int(data[5]) if len(data) > 5 else None
+            
+            _LOGGER.info(f"☁️ Weather: {src_subnet}.{src_device} → "
+                        f"Temp={temperature}°C, Humidity={humidity}%, UV={uv_index}")
+            
+            # Fire event for weather platform
+            hass.bus.async_fire("tis_weather_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "temperature": temperature,
+                "humidity": humidity,
+                "uv_index": uv_index,
+                "wind_speed": wind_speed,
+                "wind_bearing": wind_bearing,
+                "pressure": pressure,
+                "condition": None  # Can be determined from other data
             })
     
     async def handle_floor_binary_feedback(parsed: dict, entry_data: dict):

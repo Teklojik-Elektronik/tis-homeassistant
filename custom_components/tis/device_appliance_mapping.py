@@ -221,7 +221,8 @@ DEVICE_APPLIANCE_MAPPING = {
     "TIS-ZIG-WF-GTY-V5": {},
     
     # Special Devices
-    "TIS-WS-71": {},  # Weather Station
+    "TIS-WS-71": {"weather": 1},  # Weather Station
+    "TIS-WEATHER-STATION": {"weather": 1},  # Generic Weather Station
     "TIS-TRV-16CNV": {},  # TRV Controller
     "TIS-GTY-1AC": {"ac": 1},
     "TIS-VRF-AC": {"ac": 32},
@@ -319,6 +320,7 @@ TIS_APPLIANCES = [
     "lux_sensor",     # Sensor platform
     "temperature_sensor",  # Sensor platform
     "fan",  # Fan platform (speed control)
+    "weather",  # Weather platform (weather station)
 ]
 
 
@@ -344,4 +346,5 @@ APPLIANCE_TO_HA_PLATFORM = {
     "lux_sensor": "sensor",
     "temperature_sensor": "sensor",
     "fan": "fan",
+    "weather": "weather",
 }
