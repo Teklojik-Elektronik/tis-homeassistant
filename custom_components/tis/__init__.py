@@ -129,6 +129,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             src_device = parsed['src_device']
             data = parsed['additional_data']
             
+            # DEBUG: Log first 20 bytes of additional_data
+            _LOGGER.info(f"🔍 Additional_data (first 20 bytes): {data[:20].hex(' ').upper()}")
+            
             # Parse health sensor data (TISControlProtocol HealthFeedbackHandler format)
             # CORRECTED: +2 byte offset due to additional_data header (0x01 0xFE)
             # Verified with real TIS-HEALTH-CM device data (2025-12-08)
