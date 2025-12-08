@@ -15,7 +15,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-from .tis_protocol import TISPacket, TISUDPClient
 
 _LOGGER = logging.getLogger(__name__)
 
