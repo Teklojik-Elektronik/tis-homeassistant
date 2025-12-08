@@ -308,7 +308,7 @@ class TISHealthSensor(SensorEntity):
             self._attr_icon = "mdi:molecule-co2"
         elif sensor_key == "tvoc":
             self._attr_device_class = SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS
-            self._attr_native_unit_of_measurement = "ppb"
+            self._attr_native_unit_of_measurement = "μg/m³"
             self._attr_icon = "mdi:air-filter"
         elif sensor_key == "co":
             self._attr_device_class = SensorDeviceClass.CO
