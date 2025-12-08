@@ -2,11 +2,17 @@
 from __future__ import annotations
 import logging
 import os
+import sys
 import json
 import io
 from attr import dataclass
 import aiofiles
 import ruamel.yaml
+
+# Force use of local TISControlProtocol instead of pip package
+_COMPONENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _COMPONENT_DIR not in sys.path:
+    sys.path.insert(0, _COMPONENT_DIR)
 
 from TISControlProtocol.api import TISApi
 from TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler
