@@ -10,12 +10,17 @@ async def handle_security_update_feedback (hass: HomeAssistant, info: dict):
     mode = info["additional_bytes"][1]
     event_data = {
         "device_id": info["device_id"],
+        "subnet": info["device_id"][0],
+        "device": info["device_id"][1],
         "feedback_type": "security_update",
         "additional_bytes": info["additional_bytes"],
         "channel_number": channel_number,
         "mode": mode,
     }
     try:
+        # Fire standard Home Assistant event
+        hass.bus.async_fire("tis_security_update", event_data)
+        # Keep device-specific event for backward compatibility
         hass.bus.async_fire(str(info["device_id"]), event_data)
     except Exception as e:
         logging.error(f"error in firing event: {e}")

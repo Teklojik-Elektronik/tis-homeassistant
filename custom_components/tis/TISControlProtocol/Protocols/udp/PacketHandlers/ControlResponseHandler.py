@@ -10,11 +10,16 @@ async def handle_control_response(hass: HomeAssistant, info: dict):
     # await target_appliance.handle_packet(info["additional_bytes"], "control")
     event_data = {
         "device_id": info["device_id"],
+        "subnet": info["device_id"][0],
+        "device": info["device_id"][1],
         "channel_number": channel_number,
         "feedback_type": "control_response",
         "additional_bytes": info["additional_bytes"],
     }
     try:
+        # Fire standard Home Assistant event
+        hass.bus.async_fire("tis_control_response", event_data)
+        # Keep device-specific event for backward compatibility
         hass.bus.async_fire(str(info["device_id"]), event_data)
     except Exception as e:
         logging.error(f"error in firing event for feedback: {e}")
