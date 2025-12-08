@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .tis_protocol import TISUDPClient, TISPacket
+from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,17 +76,33 @@ async def async_setup_entry(
     gateway_ip = entry_data["gateway_ip"]
     udp_port = entry_data["udp_port"]
     
-    _LOGGER.info(f"Setting up {len(devices)} TIS switch entities")
+    _LOGGER.info(f"Setting up TIS switch entities")
     
     entities = []
     for unique_id, device_data in devices.items():
         subnet = device_data.get("subnet")
         device_id = device_data.get("device_id")
         model_name = device_data.get("model_name", "TIS Device")
-        channels = device_data.get("channels", 1)
         device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
-        channel_names = device_data.get("channel_names", {})  # Get channel names from JSON
-        initial_states = device_data.get("initial_states", {})  # Get initial states
+        channel_names = device_data.get("channel_names", {})
+        initial_states = device_data.get("initial_states", {})
+        
+        # Get supported platforms from device mapping
+        platforms = get_device_platforms(model_name)
+        switch_channels = get_platform_channel_count(model_name, "switch")
+        
+        # If device has explicit switch support from mapping, use that
+        if switch_channels > 0:
+            _LOGGER.debug(f"Device {model_name} supports {switch_channels} switches (from mapping)")
+            channels = switch_channels
+        else:
+            # Fallback to device.json channels (for backward compatibility)
+            channels = device_data.get("channels", 1)
+            # But skip if it's a known dimmer, sensor, or AC device
+            skip_keywords = ["DIM", "DALI", "PIR", "HEALTH", "TEMP", "ENERGY", "4T-IN"]
+            if any(kw in model_name.upper() for kw in skip_keywords):
+                _LOGGER.debug(f"Skipping {model_name} - likely not a switch device")
+                continue
         
         _LOGGER.debug(f"Device {unique_id} has {len(channel_names)} channel names in JSON")
         _LOGGER.info(f"🔍 DEBUG channel_names dict: {channel_names}")

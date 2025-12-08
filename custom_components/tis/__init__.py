@@ -18,7 +18,16 @@ from .tis_protocol import TISPacket, TISUDPClient
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SWITCH]
+# All supported platforms
+PLATFORMS: list[Platform] = [
+    Platform.SWITCH,
+    Platform.LIGHT,
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    # Platform.CLIMATE,  # Enable when climate.py is ready
+    # Platform.COVER,    # Enable when cover.py is ready
+    # Platform.FAN,      # Enable when fan.py is ready
+]
 DEVICES_FILE = "/config/tis_devices.json"
 
 
