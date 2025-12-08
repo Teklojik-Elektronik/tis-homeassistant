@@ -382,12 +382,15 @@ class TISApi:
             for ch in range(1, channels + 1):
                 channel_name = channel_names.get(str(ch), f"{device_name} CH{ch}" if channels > 1 else device_name)
                 
+                # Get gateway from addon data or use default
+                gateway_ip = device_info.get('gateway', '192.168.1.200')
+                
                 channel_entries.append({
                     "device_id": f"{subnet},{device_id}",
                     "appliance_type": entity_type,
                     "appliance_class": None,
                     "is_protected": "0",
-                    "gateway": self.gateway_ip,
+                    "gateway": gateway_ip,
                     "channel_number": ch,
                     "channel_name": channel_name,
                     "min": "0",
