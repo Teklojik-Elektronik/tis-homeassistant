@@ -56,8 +56,9 @@ async def handle_health_feedback(hass: HomeAssistant, info: dict):
     }
 
     try:
-        # Fire standard event for Home Assistant integration
+        # Fire standard Home Assistant event
         hass.bus.async_fire("tis_health_feedback", event_data)
+        logging.info(f"🏥 Fired tis_health_feedback event for {device_id[0]}.{device_id[1]}")
         # Also fire device-specific event (backward compatibility)
         hass.bus.async_fire(str(info["device_id"]), event_data)
     except Exception as e:
