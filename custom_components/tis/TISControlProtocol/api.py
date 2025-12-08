@@ -20,8 +20,16 @@ from collections import defaultdict
 import json
 import psutil
 import asyncio
-import ST7789
-from PIL import Image, ImageDraw, ImageFont
+
+# Optional Raspberry Pi display support
+try:
+    import ST7789
+    from PIL import Image, ImageDraw, ImageFont
+    DISPLAY_AVAILABLE = True
+except ImportError:
+    DISPLAY_AVAILABLE = False
+    logging.debug("ST7789 display not available (not running on Raspberry Pi)")
+
 from TISControlProtocol.shared import get_real_mac
 
 protocol_handler = TISProtocolHandler()
@@ -177,6 +185,10 @@ class TISApi:
         }
 
     def run_display(self, style="dots"):
+        if not DISPLAY_AVAILABLE:
+            logging.debug("Display initialization skipped - ST7789 not available")
+            return
+            
         try:
             self.display = ST7789.ST7789(
                 width=320,
