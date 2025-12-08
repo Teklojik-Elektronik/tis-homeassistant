@@ -9,13 +9,25 @@ from attr import dataclass
 import aiofiles
 import ruamel.yaml
 
-# Force use of local TISControlProtocol instead of pip package
+# CRITICAL: Remove system TISControlProtocol from path to force local version
+import sys
+_to_remove = [p for p in sys.path if 'site-packages' in p or 'dist-packages' in p]
+for p in _to_remove:
+    if p in sys.modules:
+        # Clear cached imports
+        mods_to_clear = [k for k in sys.modules.keys() if k.startswith('TISControlProtocol')]
+        for mod in mods_to_clear:
+            del sys.modules[mod]
+
+# Force use of local TISControlProtocol
 _COMPONENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _COMPONENT_DIR not in sys.path:
-    sys.path.insert(0, _COMPONENT_DIR)
+sys.path.insert(0, _COMPONENT_DIR)
 
 from TISControlProtocol.api import TISApi
 from TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler
+
+# Verify we're using local version
+logging.info(f"✅ Using TISControlProtocol from: {TISApi.__module__}")
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
