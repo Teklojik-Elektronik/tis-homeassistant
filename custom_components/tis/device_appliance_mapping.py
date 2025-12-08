@@ -64,6 +64,9 @@ DEVICE_APPLIANCE_MAPPING = {
     # IO Series
     "IO-AC-4G": {"ac": 1},
     
+    # Mercury (MER) Series - AC Control Panels
+    "TIS-MER-AC4G-PB": {"ac": 1, "floor_heating": 1},  # 4-Gang Push Button AC Panel with Floor Heating
+    
     # Venera Series (AC Models)
     "VEN-AC-3R-HC-BUS": {"ac": 1, "switch": 3},
     "VEN-AC-4R-HC-BUS": {"ac": 1, "switch": 4},
