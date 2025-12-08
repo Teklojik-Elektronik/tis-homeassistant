@@ -72,6 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info("Add devices via TIS Addon Web UI (http://homeassistant.local:8888)")
     else:
         _LOGGER.info(f"Loaded {len(devices)} TIS devices from addon")
+    _LOGGER.info("🔍 CODE VERSION CHECK: v1.3.0-fef4c12-UNIQUE-MARKER-2025-12-08-23-30 🔍")
     
     # Initialize TISApi (TISControlProtocol integration)
     gateway_ip = entry.data.get("gateway_ip", "192.168.1.200")
