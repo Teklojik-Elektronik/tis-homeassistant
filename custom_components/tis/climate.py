@@ -160,6 +160,7 @@ class TISClimate(ClimateEntity):
         self._attr_current_temperature = None
         
         self._listener = None
+        self._listener_luna = None
         
         # Device info - group all entities under same device
         self._attr_device_info = {
@@ -203,7 +204,23 @@ class TISClimate(ClimateEntity):
                 self.async_write_ha_state()
                 _LOGGER.info(f"Updated {self._attr_name}: {self._attr_hvac_mode}, {self._attr_target_temperature}°C, Fan={self._attr_fan_mode}")
         
+        @callback
+        def handle_luna_temp_feedback(event):
+            """Handle Luna temperature (thermostat) feedback event"""
+            data = event.data
+            
+            # Check if event is for this device
+            if (data.get("subnet") == self._subnet and 
+                data.get("device") == self._device_id):
+                
+                temperature = data.get("temperature")
+                if temperature is not None:
+                    self._attr_current_temperature = temperature
+                    self.async_write_ha_state()
+                    _LOGGER.info(f"Updated {self._attr_name} current temp: {temperature}°C")
+        
         self._listener = self.hass.bus.async_listen("tis_climate_feedback", handle_climate_feedback)
+        self._listener_luna = self.hass.bus.async_listen("tis_luna_temp_feedback", handle_luna_temp_feedback)
         
         # Query initial state
         await self.async_update()
@@ -213,6 +230,9 @@ class TISClimate(ClimateEntity):
         if self._listener:
             self._listener()
             self._listener = None
+        if self._listener_luna:
+            self._listener_luna()
+            self._listener_luna = None
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
