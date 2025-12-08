@@ -281,13 +281,20 @@ class TISApi:
 
     async def get_entities(self, platform: str = None) -> list:
         """Get the stored entities."""
-        directory = "/config/custom_components/tis_integration/"
+        directory = "/config/custom_components/tis_control/"
         os.makedirs(directory, exist_ok=True)
 
         data = await self.read_appliances(directory)
+        
+        if not data:
+            logging.warning(f"⚠️ No appliance data found in {directory}app.json - integration may need initial configuration")
 
         await self.parse_device_manager_request(data)
         entities = self.config_entries.get(platform, [])
+        
+        if not entities:
+            logging.info(f"ℹ️ No entities found for platform '{platform}'. Available platforms: {list(self.config_entries.keys())}")
+        
         return entities
 
     async def read_appliances(self, directory: str) -> dict:
@@ -298,13 +305,19 @@ class TISApi:
         try:
             async with aiofiles.open(output_file, "r") as f:
                 raw_data = await f.read()
-                # logging.warning(f"file length: {len(raw_data)}")
+                logging.debug(f"📄 Read {len(raw_data)} bytes from {output_file}")
                 if raw_data:
                     encrypted_data = json.loads(raw_data)
                     data = self.decrypt_data(encrypted_data)
+                    logging.info(f"✅ Successfully loaded and decrypted appliance data")
                 else:
+                    logging.warning(f"⚠️ app.json is empty")
                     data = {}
         except FileNotFoundError:
+            logging.warning(f"⚠️ app.json not found at {output_file} - create it or configure devices first")
+            data = {}
+        except Exception as e:
+            logging.error(f"❌ Error reading app.json: {e}")
             data = {}
         return data
 
