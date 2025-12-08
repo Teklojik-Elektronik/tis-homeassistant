@@ -14,7 +14,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
-from .tis_protocol import TISPacket, TISUDPClient
+from .TISControlProtocol.api_simple import TISApi
+from .TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler, TISPacket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,12 +73,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         _LOGGER.info(f"Loaded {len(devices)} TIS devices from addon")
     
+    # Initialize TISApi (TISControlProtocol integration)
+    gateway_ip = entry.data.get("gateway_ip", "192.168.1.200")
+    udp_port = entry.data.get("udp_port", 6000)
+    
+    _LOGGER.info(f"🚀 Initializing TISApi: {gateway_ip}:{udp_port}")
+    
+    api = TISApi(
+        port=udp_port,
+        hass=hass,
+        domain=DOMAIN,
+        host="0.0.0.0"
+    )
+    
+    try:
+        await api.connect()
+        _LOGGER.info("✅ TISApi connected successfully!")
+    except Exception as e:
+        _LOGGER.error(f"❌ Failed to connect TISApi: {e}")
+        return False
+    
     # Store integration data
     hass.data[DOMAIN][entry.entry_id] = {
         "devices": devices,
-        "gateway_ip": entry.data.get("gateway_ip", "192.168.1.200"),
-        "udp_port": entry.data.get("udp_port", 6000),
+        "gateway_ip": gateway_ip,
+        "udp_port": udp_port,
         "configured": True,
+        "api": api,  # TISControlProtocol API instance
+        "protocol": api.protocol,  # PacketProtocol instance
+        "protocol_handler": api.protocol_handler,  # TISProtocolHandler instance
         "file_watcher_task": None,
         "udp_listener_task": None,
         "update_callbacks": {},  # {(subnet, device, channel): callback_func}
@@ -840,6 +864,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await watcher_task
         except asyncio.CancelledError:
             pass
+    
+    # Disconnect TISApi
+    if entry_data and entry_data.get("api"):
+        try:
+            await entry_data["api"].disconnect()
+            _LOGGER.info("✅ TISApi disconnected")
+        except Exception as e:
+            _LOGGER.error(f"Error disconnecting TISApi: {e}")
     
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

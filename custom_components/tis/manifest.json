@@ -6,8 +6,6 @@
   "documentation": "https://github.com/Teklojik-Elektronik/tis-homeassistant",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "requirements": [
-    "ruamel.yaml"
-  ],
-  "version": "1.1.0"
+  "requirements": [],
+  "version": "1.2.0"
 }

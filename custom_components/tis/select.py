@@ -12,7 +12,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-from .tis_protocol import TISPacket, TISUDPClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -179,7 +178,7 @@ class TISSecurityMode(SelectEntity):
         return self._attr_current_option if self._attr_current_option in SECURITY_FEEDBACK_OPTIONS.values() else None
     
     async def async_select_option(self, option: str) -> None:
-        """Select new security mode."""
+        """Select new security mode using TISControlProtocol."""
         if self._is_protected and self._read_only:
             _LOGGER.error(f"🔒 Security {self._attr_name}: Cannot change mode - Admin Lock is LOCKED")
             self._attr_current_option = STATE_UNAVAILABLE
@@ -195,51 +194,90 @@ class TISSecurityMode(SelectEntity):
             raise ValueError(f"Unknown security mode: {option}")
         
         try:
-            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
+            # Get TISControlProtocol API from hass.data
+            entry_data = self.hass.data[DOMAIN]
+            entry_id = list(entry_data.keys())[0]  # Get first (and only) entry
+            api = entry_data[entry_id].get("api")
+            protocol = entry_data[entry_id].get("protocol")
+            protocol_handler = entry_data[entry_id].get("protocol_handler")
             
-            # Create security control packet (0x0104)
-            packet_obj = TISPacket.create_security_control_packet(
+            if not (api and protocol and protocol_handler):
+                raise ValueError("TISControlProtocol not available")
+            
+            # Create TISPacket using TISProtocolHandler
+            # Temporary entity mock for generate_control_security_packet
+            class EntityMock:
+                def __init__(self, subnet, device, channel, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.channel_number = channel
+                    self.gateway = gateway
+                    self.api = api_instance
+            
+            entity_mock = EntityMock(
                 self._subnet,
                 self._device_id,
                 self._channel,
-                mode_code
+                self._gateway_ip,
+                api
             )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
+            # Generate security control packet (0x0104)
+            packet = protocol_handler.generate_control_security_packet(entity_mock, mode_code)
             
-            # Update state optimistically
-            self._attr_current_option = option
-            self.async_write_ha_state()
+            # Send packet with ACK (15 retries, 1s timeout)
+            ack_received = await protocol.sender.send_packet_with_ack(packet, attempts=15, timeout=1.0)
             
-            _LOGGER.info(f"🛡️ Set security mode: {self._attr_name} → {option} (code={mode_code})")
+            if ack_received:
+                self._attr_current_option = option
+                self.async_write_ha_state()
+                _LOGGER.info(f"✅ Security mode set: {self._attr_name} → {option} (ACK received)")
+            else:
+                _LOGGER.warning(f"⚠️ Security mode set: {self._attr_name} → {option} (NO ACK after 15 attempts)")
+                # Still update optimistically
+                self._attr_current_option = option
+                self.async_write_ha_state()
+            
         except Exception as e:
-            _LOGGER.error(f"Error setting security mode: {e}", exc_info=True)
+            _LOGGER.error(f"❌ Error setting security mode: {e}", exc_info=True)
             self._attr_current_option = STATE_UNAVAILABLE
             self.async_write_ha_state()
+            raise
     
     async def async_update(self) -> None:
-        """Query device state."""
+        """Query device state using TISControlProtocol (0x011E security update query)."""
         try:
-            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
+            # Get TISControlProtocol API from hass.data
+            entry_data = self.hass.data[DOMAIN]
+            entry_id = list(entry_data.keys())[0]
+            api = entry_data[entry_id].get("api")
+            protocol = entry_data[entry_id].get("protocol")
+            protocol_handler = entry_data[entry_id].get("protocol_handler")
             
-            # Create security update query packet (0x011E)
-            packet_obj = TISPacket.create_security_query_packet(
+            if not (api and protocol and protocol_handler):
+                _LOGGER.warning("TISControlProtocol not available for update")
+                return
+            
+            # Create entity mock for generate_security_update_packet
+            class EntityMock:
+                def __init__(self, subnet, device, channel, gateway, api_instance):
+                    self.device_id = [subnet, device]
+                    self.channel_number = channel
+                    self.gateway = gateway
+                    self.api = api_instance
+            
+            entity_mock = EntityMock(
                 self._subnet,
                 self._device_id,
-                self._channel
+                self._channel,
+                self._gateway_ip,
+                api
             )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
             
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
+            # Generate security update query packet (0x011E)
+            packet = protocol_handler.generate_security_update_packet(entity_mock)
+            
+            # Send packet (update query doesn't need ACK wait)
+            await protocol.sender.send_packet(packet)
             
             _LOGGER.debug(f"🛡️ Queried security: {self._subnet}.{self._device_id} CH{self._channel}")
         except Exception as e:
