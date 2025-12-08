@@ -83,6 +83,161 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     # Start UDP listener for real-time state updates
+    async def handle_control_response(parsed: dict, entry_data: dict):
+        """Handle single channel control response (0x0032)"""
+        if len(parsed['additional_data']) >= 3:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            channel = parsed['additional_data'][0]
+            brightness_raw = parsed['additional_data'][2]
+            
+            brightness = int((brightness_raw / 248.0) * 100)
+            is_on = brightness_raw > 0
+            
+            _LOGGER.info(f"🔦 Control response: {src_subnet}.{src_device} CH{channel} → "
+                        f"{'ON' if is_on else 'OFF'} ({brightness}%)")
+            
+            callback_key = (src_subnet, src_device, channel)
+            if callback_key in entry_data["update_callbacks"]:
+                await entry_data["update_callbacks"][callback_key](is_on, brightness)
+    
+    async def handle_update_response(parsed: dict, entry_data: dict):
+        """Handle multi-channel status response (0x0034)"""
+        if len(parsed['additional_data']) >= 25:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            
+            _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device}")
+            
+            updated_count = 0
+            for channel in range(1, 25):
+                brightness_raw = parsed['additional_data'][channel]
+                brightness = int((brightness_raw / 248.0) * 100)
+                is_on = brightness_raw > 0
+                
+                callback_key = (src_subnet, src_device, channel)
+                if callback_key in entry_data["update_callbacks"]:
+                    await entry_data["update_callbacks"][callback_key](is_on, brightness)
+                    updated_count += 1
+            
+            _LOGGER.info(f"Updated {updated_count} channels for {src_subnet}.{src_device}")
+    
+    async def handle_health_feedback(parsed: dict, entry_data: dict):
+        """Handle health sensor feedback (0x2024)"""
+        if len(parsed['additional_data']) >= 14:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            # Parse health sensor data (temp, humidity, CO2, VOC, PM2.5, lux, noise)
+            temperature = int.from_bytes(data[0:2], 'big') / 10.0
+            humidity = data[2]
+            co2 = int.from_bytes(data[3:5], 'big')
+            voc = int.from_bytes(data[5:7], 'big')
+            pm25 = int.from_bytes(data[7:9], 'big')
+            lux = int.from_bytes(data[9:11], 'big')
+            noise = data[11]
+            
+            _LOGGER.info(f"🏥 Health sensor: {src_subnet}.{src_device} → "
+                        f"Temp={temperature}°C, Humidity={humidity}%, CO2={co2}ppm, "
+                        f"VOC={voc}ppb, PM2.5={pm25}µg/m³, Lux={lux}, Noise={noise}dB")
+            
+            # Fire event for sensor platform
+            hass.bus.async_fire("tis_health_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "temperature": temperature,
+                "humidity": humidity,
+                "co2": co2,
+                "voc": voc,
+                "pm25": pm25,
+                "lux": lux,
+                "noise": noise
+            })
+    
+    async def handle_energy_feedback(parsed: dict, entry_data: dict):
+        """Handle energy meter feedback (0x2010)"""
+        if len(parsed['additional_data']) >= 8:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            channel = data[0] + 1  # Convert 0-based to 1-based
+            voltage = int.from_bytes(data[1:3], 'big') / 10.0
+            current = int.from_bytes(data[3:5], 'big') / 1000.0
+            power = int.from_bytes(data[5:7], 'big')
+            energy = int.from_bytes(data[7:9], 'big') / 100.0
+            
+            _LOGGER.info(f"⚡ Energy meter: {src_subnet}.{src_device} CH{channel} → "
+                        f"V={voltage}V, I={current}A, P={power}W, E={energy}kWh")
+            
+            # Fire event for sensor platform
+            hass.bus.async_fire("tis_energy_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "channel": channel,
+                "voltage": voltage,
+                "current": current,
+                "power": power,
+                "energy": energy
+            })
+    
+    async def handle_climate_feedback(parsed: dict, entry_data: dict):
+        """Handle AC/climate feedback (0xE0EC)"""
+        if len(parsed['additional_data']) >= 5:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            ac_number = data[0]
+            state = data[1]  # 0=OFF, 1=ON
+            temperature = data[2]
+            mode_and_fan = data[3]
+            mode = (mode_and_fan >> 4) & 0x0F
+            fan_speed = mode_and_fan & 0x0F
+            
+            mode_names = {0: "Cool", 1: "Heat", 2: "Fan", 3: "Auto"}
+            fan_names = {0: "Auto", 1: "High", 2: "Medium", 3: "Low"}
+            
+            _LOGGER.info(f"❄️ AC feedback: {src_subnet}.{src_device} AC{ac_number} → "
+                        f"{'ON' if state else 'OFF'}, {temperature}°C, "
+                        f"Mode={mode_names.get(mode, 'Unknown')}, "
+                        f"Fan={fan_names.get(fan_speed, 'Unknown')}")
+            
+            # Fire event for climate platform
+            hass.bus.async_fire("tis_climate_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "ac_number": ac_number,
+                "state": state,
+                "temperature": temperature,
+                "mode": mode,
+                "fan_speed": fan_speed
+            })
+    
+    async def handle_security_feedback(parsed: dict, entry_data: dict):
+        """Handle security status feedback (0x011E)"""
+        if len(parsed['additional_data']) >= 2:
+            src_subnet = parsed['src_subnet']
+            src_device = parsed['src_device']
+            data = parsed['additional_data']
+            
+            channel = data[0]
+            mode = data[1]  # 1=Vacation, 2=Away, 3=Night, 6=Disarm
+            
+            mode_names = {1: "Vacation", 2: "Away", 3: "Night", 6: "Disarmed"}
+            
+            _LOGGER.info(f"🔒 Security feedback: {src_subnet}.{src_device} CH{channel} → "
+                        f"Mode={mode_names.get(mode, 'Unknown')}")
+            
+            # Fire event for alarm_control_panel platform
+            hass.bus.async_fire("tis_security_feedback", {
+                "subnet": src_subnet,
+                "device": src_device,
+                "channel": channel,
+                "mode": mode
+            })
+    
     async def udp_listener():
         """Listen for TIS UDP packets and update entity states."""
         entry_data = hass.data[DOMAIN][entry.entry_id]
@@ -145,57 +300,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         
                         _LOGGER.info(f"✅ Parsed: OpCode 0x{op_code:04X} from {src_subnet}.{src_device}")
                         
-                        # Handle feedback packet (OpCode 0x0032)
-                        if parsed['op_code'] == 0x0032:
-                            if len(parsed['additional_data']) >= 3:
-                                # Protocol confirmed from actual HA logs:
-                                # Raw additional_data: 10 f8 64 18 00 80 00
-                                #                      ^^ ^^ ^^
-                                # data[0] = Channel NUMBER (1-24)
-                                # data[1] = 0xF8 (fixed marker)
-                                # data[2] = Brightness (0-248)
-                                
-                                channel = parsed['additional_data'][0]  # Channel 1-24
-                                brightness_raw = parsed['additional_data'][2]
-                                
-                                # TIS uses 0-248 scale for 0-100%
-                                brightness = int((brightness_raw / 248.0) * 100)
-                                is_on = brightness_raw > 0
-                                
-                                _LOGGER.warning(f"🔦 Feedback RAW: {parsed['additional_data'][:7].hex()} → CH{channel}, brightness_raw={brightness_raw}")
-                                _LOGGER.info(f"🔦 Single channel feedback: {src_subnet}.{src_device} CH{channel} → "
-                                            f"{'ON' if is_on else 'OFF'} ({brightness}%)")
-                                
-                                # Find callback and update entity
-                                callback_key = (src_subnet, src_device, channel)
-                                if callback_key in entry_data["update_callbacks"]:
-                                    callback = entry_data["update_callbacks"][callback_key]
-                                    await callback(is_on, brightness)
-                                    _LOGGER.info(f"✅ Updated entity for CH{channel}")
-                                else:
-                                    _LOGGER.warning(f"⚠️ No callback registered for {callback_key}")                        # Handle multi-channel status (OpCode 0x0034)
-                        elif parsed['op_code'] == 0x0034:
-                            # Protocol: additional_data[0] = channel_count, additional_data[1..24] = channel states
-                            if len(parsed['additional_data']) >= 25:
-                                _LOGGER.warning(f"🔍 OpCode 0x0034 RAW: {parsed['additional_data'].hex()}")
-                                _LOGGER.info(f"Multi-channel status from {src_subnet}.{src_device} (Initial state sync)")
-                                
-                                # Skip first byte (channel count), then read 24 channel states
-                                updated_count = 0
-                                for channel in range(1, 25):  # Channels 1-24
-                                    brightness_raw = parsed['additional_data'][channel]  # Byte 1-24 (skip byte 0)
-                                    brightness = int((brightness_raw / 248.0) * 100)
-                                    is_on = brightness_raw > 0
-                                    
-                                    callback_key = (src_subnet, src_device, channel)
-                                    if callback_key in entry_data["update_callbacks"]:
-                                        callback = entry_data["update_callbacks"][callback_key]
-                                        await callback(is_on, brightness)
-                                        updated_count += 1
-                                        if is_on:
-                                            _LOGGER.debug(f"  CH{channel}: ON ({brightness}%)")
-                                
-                                _LOGGER.info(f"Updated {updated_count} channels for {src_subnet}.{src_device}")
+                        # OpCode-based dispatch system (TISControlProtocol style)
+                        try:
+                            if op_code == 0x0032:  # Control response
+                                await handle_control_response(parsed, entry_data)
+                            elif op_code == 0x0034:  # Multi-channel status
+                                await handle_update_response(parsed, entry_data)
+                            elif op_code == 0x2024:  # Health sensor feedback
+                                await handle_health_feedback(parsed, entry_data)
+                            elif op_code == 0x2010:  # Energy meter feedback
+                                await handle_energy_feedback(parsed, entry_data)
+                            elif op_code == 0xE0EC:  # AC/climate feedback
+                                await handle_climate_feedback(parsed, entry_data)
+                            elif op_code == 0x011E:  # Security feedback
+                                await handle_security_feedback(parsed, entry_data)
+                            else:
+                                _LOGGER.debug(f"Unhandled OpCode: 0x{op_code:04X}")
+                        except Exception as e:
+                            _LOGGER.error(f"Error in handler for OpCode 0x{op_code:04X}: {e}", exc_info=True)
                 
                 except asyncio.TimeoutError:
                     # No UDP packet received within timeout, continue listening

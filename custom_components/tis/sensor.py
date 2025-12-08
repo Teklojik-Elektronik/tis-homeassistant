@@ -235,23 +235,52 @@ class TISHealthSensor(SensorEntity):
         self._listener = None
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to UDP events when added to hass."""
+        """Subscribe to event bus for health sensor feedback."""
         @callback
-        async def handle_udp_event(event):
-            """Handle UDP packet events."""
-            packet_data = event.data
+        def handle_health_feedback(event):
+            """Handle health sensor feedback event from __init__.py"""
+            data = event.data
             
-            # Check if packet is for this device
-            if (packet_data.get("tgt_subnet") == self._subnet and 
-                packet_data.get("tgt_device") == self._device_id):
+            # Check if event is for this device
+            if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
+                # Update sensor value based on sensor_key
+                value_map = {
+                    "temp": data.get("temperature"),
+                    "humidity": data.get("humidity"),
+                    "eco2_state": data.get("co2"),
+                    "voc": data.get("voc"),
+                    "pm25": data.get("pm25"),
+                    "lux": data.get("lux"),
+                    "noise": data.get("noise")
+                }
                 
-                # Health sensor feedback
-                if packet_data.get("feedback_type") == "health_feedback":
-                    if self._sensor_key in packet_data:
-                        self._attr_native_value = packet_data.get(self._sensor_key)
+                if self._sensor_key in value_map:
+                    new_value = value_map[self._sensor_key]
+                    if new_value is not None:
+                        self._attr_native_value = new_value
                         self.async_write_ha_state()
+                        _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
         
-        self._listener = self.hass.bus.async_listen("tis_udp_packet", handle_udp_event)
+        self._listener = self.hass.bus.async_listen("tis_health_feedback", handle_health_feedback)
+    
+    async def async_update(self) -> None:
+        """Query health sensor data using OpCode 0x2024"""
+        from .tis_protocol import TISPacket, TISUDPClient
+        
+        try:
+            # Create health query packet
+            packet_obj = TISPacket.create_health_query_packet(self._subnet, self._device_id)
+            packet_bytes = packet_obj.build()
+            
+            # Send via UDP
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect()
+            client.send_to(packet_bytes, self._gateway_ip)
+            client.close()
+            
+            _LOGGER.debug(f"Sent health query to {self._subnet}.{self._device_id}")
+        except Exception as e:
+            _LOGGER.error(f"Error querying health sensor: {e}")
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""
@@ -317,23 +346,53 @@ class TISEnergySensor(SensorEntity):
         self._listener = None
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to UDP events when added to hass."""
+        """Subscribe to event bus for energy meter feedback."""
         @callback
-        async def handle_udp_event(event):
-            """Handle UDP packet events."""
-            packet_data = event.data
+        def handle_energy_feedback(event):
+            """Handle energy feedback event from __init__.py"""
+            data = event.data
             
-            # Check if packet is for this device
-            if (packet_data.get("tgt_subnet") == self._subnet and 
-                packet_data.get("tgt_device") == self._device_id):
+            # Check if event is for this device
+            if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
+                # Update sensor value based on sensor_key
+                value_map = {
+                    "v": data.get("voltage"),
+                    "voltage": data.get("voltage"),
+                    "i": data.get("current"),
+                    "current": data.get("current"),
+                    "active_power": data.get("power"),
+                    "power": data.get("power"),
+                    "kwh": data.get("energy"),
+                    "energy": data.get("energy")
+                }
                 
-                # Energy sensor feedback
-                if packet_data.get("feedback_type") == "energy_feedback":
-                    if self._sensor_key in packet_data:
-                        self._attr_native_value = packet_data.get(self._sensor_key)
+                if self._sensor_key in value_map:
+                    new_value = value_map[self._sensor_key]
+                    if new_value is not None:
+                        self._attr_native_value = new_value
                         self.async_write_ha_state()
+                        _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
         
-        self._listener = self.hass.bus.async_listen("tis_udp_packet", handle_udp_event)
+        self._listener = self.hass.bus.async_listen("tis_energy_feedback", handle_energy_feedback)
+    
+    async def async_update(self) -> None:
+        """Query energy meter data using OpCode 0x2010"""
+        from .tis_protocol import TISPacket, TISUDPClient
+        
+        try:
+            # Create energy query packet (channel 1, current values)
+            packet_obj = TISPacket.create_energy_query_packet(self._subnet, self._device_id, channel=1, query_type='current')
+            packet_bytes = packet_obj.build()
+            
+            # Send via UDP
+            client = TISUDPClient(self._gateway_ip, self._udp_port)
+            await client.async_connect()
+            client.send_to(packet_bytes, self._gateway_ip)
+            client.close()
+            
+            _LOGGER.debug(f"Sent energy query to {self._subnet}.{self._device_id}")
+        except Exception as e:
+            _LOGGER.error(f"Error querying energy meter: {e}")
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe when removed."""

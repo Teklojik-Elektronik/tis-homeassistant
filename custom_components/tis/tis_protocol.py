@@ -58,6 +58,23 @@ def calculate_crc(data: bytes) -> int:
 class TISPacket:
     """TIS UDP Packet Builder"""
     
+    # OpCode Tanımları (TISControlProtocol ile uyumlu)
+    OPERATION_CONTROL = 0x0031              # Tek kanal kontrol (ON/OFF/DIM)
+    OPERATION_CONTROL_UPDATE = 0x0033       # Durum sorgulama (Multi-channel)
+    OPERATION_GET_TEMP = 0xE3E7             # Sıcaklık sensörü
+    OPERATION_GET_HEALTH = 0x2024           # Health sensör (TIS-HEALTH-CM)
+    OPERATION_GET_WEATHER = 0x2020          # Hava durumu sensörü
+    OPERATION_ANALOG_UPDATE = 0xEF00        # Analog girişler
+    OPERATION_ENERGY_UPDATE = 0x2010        # Enerji ölçer
+    OPERATION_DISCOVERY = 0x000E            # Cihaz keşfi (broadcast)
+    OPERATION_CONTROL_SECURITY = 0x0104     # Güvenlik modu ayarla
+    OPERATION_SECURITY_UPDATE = 0x011E      # Güvenlik durumu sorgula
+    OPERATION_CONTROL_AC = 0xE0EE           # Klima kontrolü
+    OPERATION_AC_UPDATE = 0xE0EC            # Klima durumu sorgula
+    OPERATION_FLOOR_UPDATE = 0x1944         # Yerden ısıtma durumu
+    OPERATION_FLOOR_CONTROL = 0xE3D8        # Yerden ısıtma kontrolü
+    OPERATION_UNIVERSAL_SWITCH = 0xE01C     # Evrensel switch
+    
     def __init__(self):
         self.start_code = 0xAAAA
         self.src_subnet = 1
@@ -166,6 +183,243 @@ class TISPacket:
         except Exception as e:
             _LOGGER.error(f"Paket parse hatası: {e}")
             return None
+    
+    # ==================== Static Helper Methods ====================
+    # TISControlProtocol referans alınarak eklendi
+    
+    @staticmethod
+    def create_control_packet(subnet: int, device: int, channel: int, value: int, speed: int = 0) -> 'TISPacket':
+        """
+        Switch/Light kontrol paketi oluştur (0x0031)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+            value: 0=OFF, 1-100=ON/DIM
+            speed: Transition speed (default 0)
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_CONTROL
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel, value, speed, 0x00])
+        return packet
+    
+    @staticmethod
+    def create_query_packet(subnet: int, device: int) -> 'TISPacket':
+        """
+        Multi-channel durum sorgulama paketi (0x0033)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_CONTROL_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = b''
+        return packet
+    
+    @staticmethod
+    def create_health_query_packet(subnet: int, device: int) -> 'TISPacket':
+        """
+        Health sensör sorgulama paketi (0x2024) - TIS-HEALTH-CM için
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_GET_HEALTH
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([0x14, 0x00])  # Health sensor type
+        return packet
+    
+    @staticmethod
+    def create_temp_query_packet(subnet: int, device: int) -> 'TISPacket':
+        """
+        Sıcaklık sensörü sorgulama paketi (0xE3E7)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_GET_TEMP
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([0x00])
+        return packet
+    
+    @staticmethod
+    def create_energy_query_packet(subnet: int, device: int, channel: int, query_type: str = 'current') -> 'TISPacket':
+        """
+        Enerji ölçer sorgulama paketi (0x2010)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası (1-based)
+            query_type: 'current' veya 'monthly'
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_ENERGY_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        
+        if query_type == 'monthly':
+            packet.additional_data = bytes([channel - 1, 0xDA, 0x64])
+        else:
+            packet.additional_data = bytes([channel - 1, 0x65])
+        
+        return packet
+    
+    @staticmethod
+    def create_security_control_packet(subnet: int, device: int, channel: int, mode: int) -> 'TISPacket':
+        """
+        Güvenlik modu kontrol paketi (0x0104)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+            mode: 1=Vacation, 2=Away, 3=Night, 6=Disarm
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_CONTROL_SECURITY
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel, mode])
+        return packet
+    
+    @staticmethod
+    def create_security_query_packet(subnet: int, device: int, channel: int) -> 'TISPacket':
+        """
+        Güvenlik durumu sorgulama paketi (0x011E)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            channel: Kanal numarası
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_SECURITY_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([channel])
+        return packet
+    
+    @staticmethod
+    def create_ac_control_packet(subnet: int, device: int, ac_number: int, state: int, 
+                                 temperature: int, mode: int, fan_speed: int) -> 'TISPacket':
+        """
+        AC/Klima kontrol paketi (0xE0EE)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            ac_number: AC numarası
+            state: 0=OFF, 1=ON
+            temperature: Hedef sıcaklık (°C)
+            mode: 0=Cool, 1=Heat, 2=Fan, 3=Auto
+            fan_speed: 0=Auto, 1=High, 2=Medium, 3=Low
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_CONTROL_AC
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        
+        mode_and_fan = (mode << 4) | fan_speed
+        packet.additional_data = bytes([
+            ac_number, state, temperature, mode_and_fan,
+            0x01, temperature, temperature, temperature, 0x00
+        ])
+        return packet
+    
+    @staticmethod
+    def create_ac_query_packet(subnet: int, device: int, ac_number: int) -> 'TISPacket':
+        """
+        AC/Klima durum sorgulama paketi (0xE0EC)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            ac_number: AC numarası
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_AC_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([ac_number])
+        return packet
+    
+    @staticmethod
+    def create_floor_heating_control_packet(subnet: int, device: int, heater_number: int, 
+                                            action: str, value: int) -> 'TISPacket':
+        """
+        Yerden ısıtma kontrol paketi (0xE3D8)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            heater_number: Heater numarası (0-based)
+            action: 'power' veya 'temperature'
+            value: action='power' -> 0=OFF, 1=ON | action='temperature' -> sıcaklık değeri
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_FLOOR_CONTROL
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        
+        if heater_number == 0:
+            if action == 'power':
+                packet.additional_data = bytes([0x14, value])
+            else:  # temperature
+                packet.additional_data = bytes([0x18, value])
+        elif heater_number == 1:
+            if action == 'power':
+                packet.additional_data = bytes([0x23, 0x14, value])
+            else:  # temperature
+                packet.additional_data = bytes([0x23, 0x18, value])
+        else:
+            if action == 'power':
+                packet.additional_data = bytes([0x2E, heater_number + 1, 0x03, value])
+            else:  # temperature
+                packet.additional_data = bytes([0x2E, heater_number + 1, 0x04, value])
+        
+        return packet
+    
+    @staticmethod
+    def create_floor_heating_query_packet(subnet: int, device: int, heater_number: int) -> 'TISPacket':
+        """
+        Yerden ısıtma durum sorgulama paketi (0x1944)
+        
+        Args:
+            subnet: Hedef subnet
+            device: Hedef device ID
+            heater_number: Heater numarası
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_FLOOR_UPDATE
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = bytes([heater_number])
+        return packet
+    
+    @staticmethod
+    def create_discovery_packet() -> 'TISPacket':
+        """
+        Cihaz keşfi broadcast paketi (0x000E)
+        """
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_DISCOVERY
+        packet.tgt_subnet = 0xFF
+        packet.tgt_device = 0xFF
+        packet.additional_data = b''
+        return packet
 
 
 class TISUDPClient:
