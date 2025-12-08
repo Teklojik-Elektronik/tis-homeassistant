@@ -24,44 +24,10 @@ async def _query_device_initial_state(
     subnet: int,
     device_id: int,
 ) -> None:
-    """Query all channel states for a device using OpCode 0x0033."""
-    try:
-        # Wait 1 second for entities to register their callbacks
-        await asyncio.sleep(1)
-        
-        client = TISUDPClient(gateway_ip, udp_port)
-        await client.async_connect(bind=False)
-        
-        # Get local IP for SMARTCLOUD header
-        import socket
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(('8.8.8.8', 80))
-            local_ip = s.getsockname()[0]
-        finally:
-            s.close()
-        
-        ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-        
-        # Query multi-channel status (OpCode 0x0033 -> response 0x0034)
-        packet = TISPacket()
-        packet.src_subnet = 1
-        packet.src_device = 254
-        packet.src_type = 0xFFFE
-        packet.tgt_subnet = subnet
-        packet.tgt_device = device_id
-        packet.op_code = 0x0033  # Multi-channel status query
-        packet.additional_data = bytes([])
-        
-        tis_data = packet.build()
-        full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-        client.send_to(full_packet, gateway_ip)
-        
-        client.close()
-        
-        _LOGGER.info(f"Queried initial state for device {subnet}.{device_id}")
-    except Exception as e:
-        _LOGGER.error(f"Failed to query initial state for {subnet}.{device_id}: {e}")
+    """Query all channel states - TODO: Migrate to TISControlProtocol"""
+    # Temporarily disabled - needs TISControlProtocol migration
+    _LOGGER.debug(f"Initial state query skipped (migration pending): {subnet}.{device_id}")
+    return
 
 
 async def async_setup_entry(
@@ -252,41 +218,10 @@ class TISSwitch(SwitchEntity):
         _LOGGER.debug(f"Unregistered callbacks for {self._subnet}.{self._device_id} CH{self._channel}")
     
     async def _request_channel_name_only(self) -> None:
-        """Request only channel name from device (for retry)."""
-        try:
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect(bind=False)
-            
-            # Get local IP for SMARTCLOUD header
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
-            
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            
-            # Request channel name (OpCode 0xF00E)
-            packet = TISPacket()
-            packet.src_subnet = 1
-            packet.src_device = 254
-            packet.src_type = 0xFFFE
-            packet.tgt_subnet = self._subnet
-            packet.tgt_device = self._device_id
-            packet.op_code = 0xF00E  # Channel name query
-            packet.additional_data = bytes([self._channel])
-            
-            tis_data = packet.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            client.send_to(full_packet, self._gateway_ip)
-            
-            client.close()
-            
-            _LOGGER.debug(f"Retry: Requested channel name from {self._subnet}.{self._device_id} CH{self._channel}")
-        except Exception as e:
-            _LOGGER.error(f"Failed to request channel name: {e}")
+        """Request channel name - TODO: Migrate to TISControlProtocol"""
+        # Temporarily disabled - needs TISControlProtocol migration
+        _LOGGER.debug(f"Channel name query skipped (migration pending): {self._subnet}.{self._device_id} CH{self._channel}")
+        return
     
     async def _handle_feedback(self, is_on: bool, brightness: int):
         """Handle feedback from UDP listener."""
