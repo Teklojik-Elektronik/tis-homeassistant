@@ -45,7 +45,7 @@ async def async_setup_entry(hass,entry,async_add_devices):
             J.extend(C)
     P=CPUTemperatureSensor(B);J.append(P);async_add_devices(J)
 def get_coordinator(hass,tis_api,device_id,gateway,coordinator_type,channel_number):
-    G=channel_number;F=tis_api;D=device_id;A=coordinator_type;E=f"{tuple}_{__var1}", __var1=A)if _C not in A else f"{tuple}_{__var1}_{__var2}", __var1=A, __var2=G)
+    G=channel_number;F=tis_api;D=device_id;A=coordinator_type;E=f"{tuple(D)}_{A}"if _C not in A else f"{tuple(D)}_{A}_{G}"
     if E not in coordinators:
         B=TISSensorEntity(D,F,gateway,G)
         if A==_I:C=protocol_handler.generate_temp_sensor_update_packet(entity=B)
