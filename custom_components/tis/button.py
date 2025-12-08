@@ -1,116 +1,20 @@
-"""Support for TIS button/universal switch entities."""
 from __future__ import annotations
-
-import logging
-from typing import Any
-
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-from .const import DOMAIN
-from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-
-_LOGGER = logging.getLogger(__name__)
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up TIS button entities from config entry."""
-    gateway_ip = entry.data.get("gateway_ip", "192.168.1.200")
-    udp_port = entry.data.get("udp_port", 6000)
-    devices = hass.data[DOMAIN].get("devices", {})
-    
-    entities = []
-    for unique_id, device_data in devices.items():
-        subnet = device_data.get("subnet")
-        device_id = device_data.get("device_id")
-        model_name = device_data.get("model_name", "TIS Device")
-        device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
-        
-        # Check if device has universal switch support
-        platforms = get_device_platforms(model_name)
-        universal_channels = get_platform_channel_count(model_name, "universal_switch")
-        
-        if universal_channels > 0:
-            _LOGGER.info(f"Creating {universal_channels} button entities for {model_name} ({subnet}.{device_id})")
-            
-            for channel in range(universal_channels):
-                button_entity = TISUniversalSwitch(
-                    device_name,
-                    unique_id,
-                    model_name,
-                    subnet,
-                    device_id,
-                    channel,
-                    gateway_ip,
-                    udp_port,
-                    universal_type=0,  # Default type, can be configured
-                )
-                entities.append(button_entity)
-    
-    if entities:
-        async_add_entities(entities)
-
-
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from TISControlProtocol.api import TISApi
+from TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler
+from homeassistant.core import HomeAssistant
+import logging,json
+from.import TISConfigEntry,DOMAIN
+async def async_setup_entry(hass,config_entry,async_add_entities):
+    B=config_entry.runtime_data.api;C=await B.get_entities(platform='universal_switch')
+    if C:
+        A=[(C,next(iter(A['channels'][0].values())),A['device_id'],A['is_protected'],A['gateway'],A['settings'])for B in C for(C,A)in B.items()]
+        try:A=[TISUniversalSwitch(tis_api=B,device_name=A,channel_number=C,device_id=D,gateway=E,universal_type=int(json.loads(F).get('universal_type',0)))for(A,C,D,G,E,F)in A];async_add_entities(A)
+        except Exception as D:logging.error(f"error happened creating universal switches error: {D}")
+protocol_handler=TISProtocolHandler()
 class TISUniversalSwitch(ButtonEntity):
-    """Representation of TIS Universal Switch Button."""
-    
-    def __init__(
-        self,
-        device_name: str,
-        unique_id: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        channel: int,
-        gateway_ip: str,
-        udp_port: int,
-        universal_type: int = 0,
-    ) -> None:
-        """Initialize universal switch button."""
-        self._subnet = subnet
-        self._device_id = device_id
-        self._channel = channel
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        self._universal_type = int(universal_type * 255)  # 0-255 range
-        
-        self._attr_name = f"{device_name} Button {channel + 1}"
-        self._attr_unique_id = f"{unique_id}_button_{channel}"
-        
-        # Device info
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-    
-    async def async_press(self) -> None:
-        """Handle button press."""
-        try:
-            ip_bytes = bytes(map(int, self._gateway_ip.split('.')))
-            
-            # Create universal switch packet (0xE01C)
-            packet_obj = TISPacket.create_universal_switch_packet(
-                self._subnet,
-                self._device_id,
-                self._channel,
-                self._universal_type
-            )
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
-            
-            _LOGGER.info(f"🔘 Pressed button: {self._subnet}.{self._device_id} CH{self._channel} Type={self._universal_type}")
-        except Exception as e:
-            _LOGGER.error(f"Error pressing button: {e}", exc_info=True)
+    _attr_has_entity_name=True;_attr_name=None;_attr_should_poll=False
+    def __init__(A,tis_api,device_name,channel_number,device_id,gateway,universal_type=0):B=device_name;A._attr_unique_id=f"universal_switch_{B}";A._attr_name=B;A.device_id=device_id;A.gateway=gateway;A.channel_number=channel_number;A.api=tis_api;A.universal_type=int(universal_type*255);A._attr_device_info=DeviceInfo(identifiers={(DOMAIN,A._attr_unique_id)},name=B);A.press_packet=protocol_handler.generate_universal_switch_packet(A);logging.warning(f"press packet: {A}")
+    async def async_press(A):return await A.api.protocol.sender.send_packet(A.press_packet)

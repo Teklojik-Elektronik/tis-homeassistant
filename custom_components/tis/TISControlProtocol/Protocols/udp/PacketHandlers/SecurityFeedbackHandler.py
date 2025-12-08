@@ -14,17 +14,12 @@ async def handle_security_feedback(hass: HomeAssistant, info: dict):
     mode = info["additional_bytes"][1]
     event_data = {
         "device_id": info["device_id"],
-        "subnet": info["device_id"][0],
-        "device": info["device_id"][1],
         "feedback_type": "security_feedback",
         "additional_bytes": info["additional_bytes"],
         "channel_number": channel_number,
         "mode": mode,
     }
     try:
-        # Fire standard Home Assistant event
-        hass.bus.async_fire("tis_security_feedback", event_data)
-        # Keep device-specific event for backward compatibility
         hass.bus.async_fire(str(info["device_id"]), event_data)
         logging.info(
             f"control response event fired for {info['device_id']}, additional bytes: {info['additional_bytes']}"

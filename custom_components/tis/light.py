@@ -1,324 +1,149 @@
-"""Support for TIS lights and dimmers."""
 from __future__ import annotations
-
+_H='channel_number'
+_G='offline_device'
+_F='update_response'
+_E=True
+_D='additional_bytes'
+_C=False
+_B='feedback_type'
+_A=None
 import logging
+from math import ceil
 from typing import Any
-
-from homeassistant.components.light import (
-    ATTR_BRIGHTNESS,
-    ColorMode,
-    LightEntity,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant, callback
+from TISControlProtocol.api import TISApi
+from TISControlProtocol.BytesHelper import int_to_8_bit_binary
+from TISControlProtocol.Protocols.udp.ProtocolHandler import TISPacket,TISProtocolHandler
+from homeassistant.components.light import ATTR_BRIGHTNESS,ATTR_RGB_COLOR,ATTR_RGBW_COLOR,ColorMode,LightEntity,LightEntityFeature
+from homeassistant.const import STATE_OFF,STATE_ON,STATE_UNKNOWN
+from homeassistant.core import Event,HomeAssistant,callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-from .const import DOMAIN
-from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-
-_LOGGER = logging.getLogger(__name__)
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up TIS lights from addon devices.json."""
-    entry_data = hass.data[DOMAIN][entry.entry_id]
-    devices = entry_data["devices"]
-    gateway_ip = entry_data["gateway_ip"]
-    udp_port = entry_data["udp_port"]
-    
-    _LOGGER.info(f"Setting up TIS light entities from {len(devices)} devices")
-    
-    entities = []
-    for unique_id, device_data in devices.items():
-        subnet = device_data.get("subnet")
-        device_id = device_data.get("device_id")
-        model_name = device_data.get("model_name", "TIS Device")
-        device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
-        
-        # Get supported platforms from device mapping
-        platforms = get_device_platforms(model_name)
-        dimmer_channels = get_platform_channel_count(model_name, "dimmer")
-        rgb_channels = get_platform_channel_count(model_name, "rgb")
-        rgbw_channels = get_platform_channel_count(model_name, "rgbw")
-        
-        # Check if device has light support
-        total_light_channels = dimmer_channels + rgb_channels + rgbw_channels
-        
-        if total_light_channels > 0:
-            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Lights: dimmer={dimmer_channels}, rgb={rgb_channels}, rgbw={rgbw_channels}")
-            
-            # For now, only implement dimmer support
-            if dimmer_channels > 0:
-                channels = dimmer_channels
-                channel_names = device_data.get("channel_names", {})
-                initial_states = device_data.get("initial_states", {})
-                
-                for channel in range(1, channels + 1):
-                    predefined_name = channel_names.get(str(channel))
-                    initial_state = initial_states.get(str(channel))
-                
-                light_entity = TISLight(
-                    hass,
-                    entry,
-                    unique_id,
-                    device_name,
-                    model_name,
-                    subnet,
-                    device_id,
-                    channel,
-                    gateway_ip,
-                    udp_port,
-                    predefined_name,
-                    initial_state
-                )
-                entities.append(light_entity)
-    
-    if entities:
-        async_add_entities(entities)
-        _LOGGER.info(f"Added {len(entities)} TIS light entities")
-
-
+from.import TISConfigEntry
+handler=TISProtocolHandler()
+async def async_setup_entry(hass,entry,async_add_devices):
+    F='gateway';E='is_protected';D='device_id';C=async_add_devices;B='channels';A=entry.runtime_data.api;G=await A.get_entities(platform='dimmer')
+    if G:J=[(C,next(iter(A[B][0].values())),A[D],A[E],A[F])for A in G for(C,A)in A.items()];K=[TISLight(tis_api=A,light_name=B,device_id=D,channel_number=C,gateway=E)for(B,C,D,F,E)in J];C(K)
+    H=await A.get_entities(platform='rgb')
+    if H:L=[(C,next(iter(A[B][0].values())),next(iter(A[B][1].values())),next(iter(A[B][2].values())),A[D],A[E],A[F])for A in H for(C,A)in A.items()];M=[TISRGBLight(tis_api=A,light_name=B,r_channel=C,g_channel=D,b_channel=E,device_id=F,gateway=G)for(B,C,D,E,F,H,G)in L];C(M)
+    I=await A.get_entities(platform='rgbw')
+    if I:N=[(C,next(iter(A[B][0].values())),next(iter(A[B][1].values())),next(iter(A[B][2].values())),next(iter(A[B][3].values())),A[D],A[E],A[F])for A in I for(C,A)in A.items()];O=[TISRGBWLight(tis_api=A,light_name=B,r_channel=C,g_channel=D,b_channel=E,w_channel=F,device_id=G,gateway=H)for(B,C,D,E,F,G,I,H)in N];C(O)
 class TISLight(LightEntity):
-    """Representation of a TIS light/dimmer."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        unique_id: str,
-        device_name: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        channel: int,
-        gateway_ip: str,
-        udp_port: int,
-        predefined_name: str = None,
-        initial_state: dict = None,
-    ) -> None:
-        """Initialize the light."""
-        self.hass = hass
-        self._entry = entry
-        self._unique_id_prefix = unique_id
-        self._device_name = device_name
-        self._model_name = model_name
-        self._subnet = subnet
-        self._device_id = device_id
-        self._channel = channel
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        
-        # Set entity name
-        if predefined_name:
-            self._attr_name = f"{device_name} {predefined_name}"
-        else:
-            self._attr_name = f"{device_name} CH{channel}"
-        
-        self._attr_unique_id = f"{unique_id}_ch{channel}_light"
-        
-        # Light properties
-        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
-        self._attr_color_mode = ColorMode.BRIGHTNESS
-        
-        # Initial state
-        if initial_state and isinstance(initial_state, dict):
-            brightness_pct = initial_state.get("brightness", 0)
-            # Convert from 0-248 (TIS) to 0-255 (Home Assistant)
-            self._attr_brightness = int((brightness_pct / 248.0) * 255) if brightness_pct > 0 else 0
-            self._attr_is_on = brightness_pct > 0
-        else:
-            self._attr_brightness = None
-            self._attr_is_on = None
-        
-        self._listener = None
-        
-        # Device info - group all entities under same device
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to UDP events when added to hass."""
+    def __init__(A,tis_api,gateway,light_name,channel_number,device_id):A.api=tis_api;A.gateway=gateway;A.device_id=device_id;A.channel_number=int(channel_number);A._attr_name=light_name;A._attr_state=_C;A._attr_brightness=_A;A.listener=_A;A.broadcast_channel=255;A._attr_unique_id=f"{A}_{A}";A.setup_light()
+    def setup_light(A):A._attr_supported_color_modes={ColorMode.BRIGHTNESS};A._attr_color_mode=ColorMode.BRIGHTNESS;A._attr_supported_features=LightEntityFeature.TRANSITION;A.generate_light_packet=handler.generate_light_control_packet;A.update_packet=handler.generate_control_update_packet(A)
+    async def async_added_to_hass(A):
         @callback
-        def handle_udp_event(event):
-            """Handle incoming UDP packet events."""
-            data = event.data
-            
-            # Filter by feedback_type
-            feedback_type = data.get("feedback_type")
-            if feedback_type not in ["control_response", "binary_feedback", "update_response"]:
-                return
-            
-            # Check if event is for this device
-            device_id = data.get("device_id")
-            if not device_id or device_id[0] != self._subnet or device_id[1] != self._device_id:
-                return
-            
-            # Extract channel from feedback
-            channel_num = data.get("channel_number")
-            if channel_num != self._channel:
-                return
-            
-            # Parse brightness from response
-            additional_bytes = data.get("additional_bytes", [])
-            
-            if feedback_type == "control_response" and len(additional_bytes) > 2:
-                brightness_raw = int(additional_bytes[2])
-                self._attr_brightness = int((brightness_raw / 100.0) * 255)
-                self._attr_is_on = brightness_raw > 0
-                self.async_write_ha_state()
-            
-            elif feedback_type == "update_response" and len(additional_bytes) > self._channel:
-                brightness_raw = int(additional_bytes[self._channel])
-                self._attr_brightness = int((brightness_raw / 100.0) * 255)
-                self._attr_is_on = brightness_raw > 0
-                self.async_write_ha_state()
-            
-            elif feedback_type == "binary_feedback":
-                # Binary feedback for on/off state
-                from math import ceil
-                from .TISControlProtocol.BytesHelper import int_to_8_bit_binary
-                
-                if len(additional_bytes) > 0:
-                    channel_count = ceil(additional_bytes[0] / 8)
-                    binary_str = "".join(int_to_8_bit_binary(additional_bytes[i]) for i in range(1, channel_count + 1))
-                    if self._channel <= len(binary_str):
-                        self._attr_is_on = binary_str[self._channel - 1] == "1"
-                        self.async_write_ha_state()
-        
-        device_id_str = f"[{self._subnet}, {self._device_id}]"
-        self._listener = self.hass.bus.async_listen(device_id_str, handle_udp_event)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-
+        async def B(event):
+            B=event
+            if B.event_type==str(A.device_id):
+                if B.data[_B]=='control_response':
+                    logging.info(f"channel number for light: {A}");C=B.data[_D][2];D=B.data[_H]
+                    if int(D)==A.channel_number:A._attr_state=int(C)!=0;A._attr_brightness=int(C/100*255)
+                    A.async_write_ha_state()
+                elif A.channel_number!=A.broadcast_channel:
+                    if B.data[_B]=='binary_feedback':
+                        E=ceil(B.data[_D][0]/8);F=alpha__("").join(int_to_8_bit_binary(B.data[_D][A])for A in range(1,E+1))
+                        if F[A.channel_number-1]=='0':A._attr_state=_C
+                        A.async_write_ha_state()
+                    elif B.data[_B]==_F:G=B.data[_D];A._attr_brightness=int(G[A.channel_number]/100*255);A._attr_state=STATE_ON if A._attr_brightness>0 else STATE_OFF
+                elif B.data[_B]==_G:A._attr_state=STATE_UNKNOWN
+        A.listener=A.hass.bus.async_listen(str(A.device_id),B);C=await A.api.protocol.sender.send_packet(A.update_packet)
     @property
-    def brightness(self) -> int | None:
-        """Return the brightness of this light (0-255)."""
-        return self._attr_brightness
-
+    def brightness(self):return self._attr_brightness
     @property
-    def is_on(self) -> bool | None:
-        """Return true if light is on."""
-        return self._attr_is_on
-
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the light on."""
-        # Get brightness from kwargs or use max
-        brightness = kwargs.get(ATTR_BRIGHTNESS, 255)
-        
-        # Convert from 0-255 (HA) to 0-248 (TIS)
-        brightness_tis = int((brightness / 255.0) * 248)
-        brightness_tis = max(1, min(248, brightness_tis))  # Clamp to 1-248
-        
-        # Send control packet using TISControlProtocol
+    def color_mode(self):return self._attr_color_mode
+    @property
+    def supported_color_modes(self):return self._attr_supported_color_modes
+    @property
+    def supported_features(self):return self._attr_supported_features
+    @property
+    def is_on(self):return self._attr_brightness>0 if self._attr_brightness is not _A else _A
+    @property
+    def name(self):return self._attr_name
+    async def async_turn_on(A,**B):
+        try:C=B[ATTR_BRIGHTNESS]
+        except KeyError:C=255
+        D=A.generate_light_packet(A,int(C/255*100));E=await A.api.protocol.sender.send_packet_with_ack(D)
+        if E:A._attr_state=_E;A._attr_brightness=B.get(ATTR_BRIGHTNESS,255)
+        else:A._attr_state=_A;A._attr_brightness=_A
+        A.async_write_ha_state()
+    async def async_turn_off(A,**D):
+        B=A.generate_light_packet(A,0);C=await A.api.protocol.sender.send_packet_with_ack(B)
+        if C:A._attr_brightness=0;A._attr_state=_C
+        else:A._attr_state=_A;A._attr_brightness=_A
+        A.async_write_ha_state()
+class TISRGBLight(LightEntity):
+    def __init__(A,tis_api,gateway,device_id,r_channel,g_channel,b_channel,light_name):A.api=tis_api;A.gateway=gateway;A.device_id=device_id;A.r_channel=int(r_channel);A.g_channel=int(g_channel);A.b_channel=int(b_channel);A.rgb_value_flags=[0,0,0];A._attr_name=light_name;A._attr_state=_A;A._attr_rgb_color=_A;A._attr_brightness=_A;A.listener=_A;A._attr_unique_id=f"{A}_{A}_{A}_{A}";A.default_color=0,0,0;A.setup_light()
+    def setup_light(A):A._attr_supported_color_modes={ColorMode.RGB};A._attr_color_mode=ColorMode.RGB;A.generate_rgb_packets=handler.generate_rgb_light_control_packet;A.update_packet=handler.generate_control_update_packet(A)
+    async def async_added_to_hass(A):
+        @callback
+        async def B(event):
+            C=event
+            if C.event_type==str(A.device_id):
+                if C.data[_B]==_F:
+                    D=C.data[_D];B=C.data[_H]
+                    if A._attr_rgb_color is _A:A._attr_rgb_color=[0,0,0]
+                    if B==A.r_channel:A._attr_rgb_color[0]=int(D[B]/100*255)
+                    elif B==A.g_channel:A._attr_rgb_color[1]=int(D[B]/100*255)
+                    elif B==A.b_channel:A._attr_rgb_color[2]=int(D[B]/100*255)
+                    A._attr_state=bool(A.r_channel or A.g_channel or A.b_channel)
+                elif C.data[_B]==_G:A._attr_state=STATE_UNKNOWN
+        A.listener=A.hass.bus.async_listen(str(A.device_id),B)
+        for C in range(5):
+            if A._attr_rgb_color is _A:D=await A.api.protocol.sender.send_packet(A.update_packet)
+        if A._attr_rgb_color is _A:A._attr_state=STATE_UNKNOWN;A._attr_rgb_color=0,0,0
+    @property
+    def color_mode(self):return self._attr_color_mode
+    @property
+    def brightness(self):return self._attr_brightness
+    @property
+    def rgb_color(self):return self._attr_rgb_color
+    @property
+    def supported_color_modes(self):return self._attr_supported_color_modes
+    @property
+    def is_on(self):return self._attr_state
+    @property
+    def name(self):return self._attr_name
+    async def async_turn_on(A,**G):
         try:
-            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self.name}")
-                return
-            
-            # Create entity mock for protocol handler
-            class EntityMock:
-                def __init__(self, subnet, device, channel, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.channel_number = channel
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._channel,
-                self._gateway_ip,
-                api
-            )
-            
-            # Generate light control packet with brightness
-            packet = protocol_handler.generate_light_control_packet(entity_mock, brightness_tis)
-            
-            # Send with ACK mechanism
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"✅ Light ON: {self.name} (brightness={brightness}, ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ Light ON: {self.name} (brightness={brightness}, NO ACK - optimistic update)")
-            
-            # Update state optimistically
-            self._attr_brightness = brightness
-            self._attr_is_on = True
-            self.async_write_ha_state()
-            
-        except Exception as e:
-            _LOGGER.error(f"❌ Failed to turn on {self.name}: {e}")
-
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the light off."""
+            B=G.get(ATTR_RGB_COLOR,_A);C=G.get(ATTR_BRIGHTNESS,_A);logging.info(f"color: {B}");logging.info(f"brightness: {C}")
+            if B is not _A:B=tuple([int(A/255*100)for A in B]);D,E,F=A.generate_rgb_packets(A,B);await A.api.protocol.sender.send_packet(D);await A.api.protocol.sender.send_packet(E);await A.api.protocol.sender.send_packet(F);A._attr_state=_E;B=tuple([int(A/100*255)for A in B]);A._attr_rgb_color=B;A.default_color=B;logging.info(f"new default color: {B}")
+            elif C is not _A:C=max(1,min(255,C));C/=255;B=A.default_color or(0,0,0);logging.info(f"default color: {B}");B=tuple([int(C*A*100/255)for A in B]);D,E,F=A.generate_rgb_packets(A,B);await A.api.protocol.sender.send_packet(D);await A.api.protocol.sender.send_packet(E);await A.api.protocol.sender.send_packet(F);logging.info(f"brightened color: {B}")
+            else:logging.info('Neither color nor brightness provided, using default color.');B=A.default_color or(0,0,0);A._attr_state=_E if A.default_color and A.default_color!=(0,0,0)else _C;A._attr_rgb_color=B;B=tuple([int(A*100/255)for A in B]);D,E,F=A.generate_rgb_packets(A,B);await A.api.protocol.sender.send_packet(D);await A.api.protocol.sender.send_packet(E);await A.api.protocol.sender.send_packet(F)
+        except KeyError as H:logging.error(f"error turning on light: {H}")
+        A.async_write_ha_state()
+    async def async_turn_off(A,**B):logging.info('turning off');logging.info(f"kwargs: {B}");C,D,E=A.generate_rgb_packets(A,(0,0,0));await A.api.protocol.sender.send_packet(D);await A.api.protocol.sender.send_packet(C);await A.api.protocol.sender.send_packet(E);A._attr_state=_C;A._attr_rgb_color=0,0,0;A.async_write_ha_state()
+class TISRGBWLight(LightEntity):
+    def __init__(A,tis_api,gateway,device_id,r_channel,g_channel,b_channel,w_channel,light_name):A.api=tis_api;A.gateway=gateway;A.device_id=device_id;A.r_channel=int(r_channel);A.g_channel=int(g_channel);A.b_channel=int(b_channel);A.w_channel=int(w_channel);A._attr_name=light_name;A._attr_state=_A;A._attr_brightness=_A;A._attr_rgbw_color=_A;A.rgbw_value_flags=[0,0,0,0];A.listener=_A;A._attr_unique_id=f"{A}_{A}_{A}_{A}_{A}";A.default_color=0,0,0,0;A.setup_light()
+    def setup_light(A):A._attr_supported_color_modes={ColorMode.RGBW};A._attr_color_mode=ColorMode.RGBW;A._attr_supported_features=LightEntityFeature.TRANSITION;A.generate_rgbw_packets=handler.generate_rgbw_light_control_packet;A.update_packet=handler.generate_control_update_packet(A)
+    async def async_added_to_hass(A):
+        @callback
+        async def B(event):
+            B=event
+            if B.event_type==str(A.device_id):
+                if B.data[_B]==_F:logging.info(f"RGBW event data: {B}");C=B.data[_D];D=C[A.r_channel]/100*255;E=C[A.g_channel]/100*255;F=C[A.b_channel]/100*255;G=C[A.w_channel]/100*255;A._attr_rgbw_color=D,E,F,G;A._attr_state=bool(D or E or F or G)
+                elif B.data[_B]==_G:A._attr_state=STATE_UNKNOWN
+        A.listener=A.hass.bus.async_listen(str(A.device_id),B)
+        for C in range(5):
+            if A._attr_rgbw_color is _A:D=await A.api.protocol.sender.send_packet(A.update_packet)
+        if A._attr_rgbw_color is _A:A._attr_state=STATE_UNKNOWN;A._attr_rgbw_color=0,0,0,0
+    @property
+    def brightness(self):return self._attr_brightness
+    @property
+    def color_mode(self):return self._attr_color_mode
+    @property
+    def rgbw_color(self):return self._attr_rgbw_color
+    @property
+    def supported_color_modes(self):return self._attr_supported_color_modes
+    @property
+    def supported_features(self):return self._attr_supported_features
+    @property
+    def is_on(self):return self._attr_state
+    @property
+    def name(self):return self._attr_name
+    async def async_turn_on(A,**D):
         try:
-            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self.name}")
-                return
-            
-            # Create entity mock for protocol handler
-            class EntityMock:
-                def __init__(self, subnet, device, channel, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.channel_number = channel
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._channel,
-                self._gateway_ip,
-                api
-            )
-            
-            # Generate light OFF packet (brightness=0)
-            packet = protocol_handler.generate_light_control_packet(entity_mock, 0)
-            
-            # Send with ACK mechanism
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"✅ Light OFF: {self.name} (ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ Light OFF: {self.name} (NO ACK - optimistic update)")
-            
-            # Update state optimistically
-            self._attr_brightness = 0
-            self._attr_is_on = False
-            self.async_write_ha_state()
-            
-        except Exception as e:
-            _LOGGER.error(f"❌ Failed to turn off {self.name}: {e}")
+            B=D.get(ATTR_RGBW_COLOR,_A);C=D.get(ATTR_BRIGHTNESS,_A);logging.warning(f"kwargs: {D}")
+            if B is not _A:B=tuple([int(A/255*100)for A in B]);E,F,G,H=A.generate_rgbw_packets(A,B);logging.info(f"color (percent): {B}");await A.api.protocol.sender.send_packet(E);await A.api.protocol.sender.send_packet(F);await A.api.protocol.sender.send_packet(G);await A.api.protocol.sender.send_packet(H);A._attr_state=_E;B=tuple([int(A/100*255)for A in B]);A._attr_rgbw_color=B;A.default_color=B
+            elif C is not _A:C=max(1,min(255,C));logging.warning(f"brightness: {C}, self._attr_brightness: {A}");A._attr_brightness=C;C/=255;B=A.default_color or(0,0,0,0);logging.info(f"default color: {B}");B=tuple([int(C*A*100/255)for A in B]);E,F,G,H=A.generate_rgbw_packets(A,B);await A.api.protocol.sender.send_packet(E);await A.api.protocol.sender.send_packet(F);await A.api.protocol.sender.send_packet(G);await A.api.protocol.sender.send_packet(H);A._attr_state=_E;B=tuple([int(A/100*255)for A in B]);A._attr_rgbw_color=B
+        except KeyError as I:logging.error(f"error turning on light: {I}")
+        A.async_write_ha_state()
+    async def async_turn_off(A,**F):B,C,D,E=A.generate_rgbw_packets(A,(0,0,0,0));await A.api.protocol.sender.send_packet(B);await A.api.protocol.sender.send_packet(C);await A.api.protocol.sender.send_packet(D);await A.api.protocol.sender.send_packet(E);A._attr_state=_C;A._attr_rgbw_color=0,0,0,0;A.async_write_ha_state()

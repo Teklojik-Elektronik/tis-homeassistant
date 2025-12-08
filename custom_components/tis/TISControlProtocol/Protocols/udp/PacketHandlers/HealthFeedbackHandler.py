@@ -38,16 +38,13 @@ async def handle_health_feedback(hass: HomeAssistant, info: dict):
 
     event_data = {
         "device_id": device_id,
-        "subnet": device_id[0],  # Add for Home Assistant compatibility
-        "device": device_id[1],  # Add for Home Assistant compatibility
         "feedback_type": "health_feedback",
         "lux": lux,
         "noise": noise,
         "eco2": eco2,
         "tvoc": tvoc,
         "co": co,
-        "temperature": temp,  # Rename from temp for consistency
-        "temp": temp,  # Keep for backward compatibility
+        "temp": temp,
         "humidity": humidity,
         "eco2_state": eco2_state,
         "tvoc_state": tvoc_state,
@@ -56,10 +53,6 @@ async def handle_health_feedback(hass: HomeAssistant, info: dict):
     }
 
     try:
-        # Fire standard Home Assistant event
-        hass.bus.async_fire("tis_health_feedback", event_data)
-        logging.info(f"🏥 Fired tis_health_feedback event for {device_id[0]}.{device_id[1]}")
-        # Also fire device-specific event (backward compatibility)
         hass.bus.async_fire(str(info["device_id"]), event_data)
     except Exception as e:
         logging.error(f"error in firing event for feedback health: {e}")

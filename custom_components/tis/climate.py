@@ -1,705 +1,162 @@
-"""Support for TIS climate devices (AC, HVAC)."""
 from __future__ import annotations
-
-import asyncio
+_I='operation_value'
+_H='sub_operation'
+_G='number'
+_F='feedback_type'
+_E=False
+_D=True
+_C='max'
+_B='min'
+_A=None
+from homeassistant.helpers.event import async_track_time_interval
+from collections.abc import Callable
+from datetime import timedelta
 import logging
 from typing import Any
-
-from homeassistant.components.climate import (
-    ClimateEntity,
-    ClimateEntityFeature,
-    HVACMode,
-    FAN_AUTO,
-    FAN_HIGH,
-    FAN_LOW,
-    FAN_MEDIUM,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
-from homeassistant.core import HomeAssistant, callback
+from TISControlProtocol.api import TISApi
+from TISControlProtocol.Protocols.udp.ProtocolHandler import TISPacket,TISProtocolHandler
+from homeassistant.components.climate import ATTR_TEMPERATURE,FAN_AUTO,FAN_HIGH,FAN_LOW,FAN_MEDIUM,ClimateEntity,ClimateEntityFeature,HVACMode,UnitOfTemperature
+from homeassistant.const import STATE_OFF,STATE_ON,STATE_UNKNOWN
+from homeassistant.core import Event,HomeAssistant,callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-from .const import DOMAIN
-from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-
-_LOGGER = logging.getLogger(__name__)
-
-# TIS HVAC Mode mapping
-TIS_HVAC_MODES = {
-    0: HVACMode.COOL,
-    1: HVACMode.HEAT,
-    2: HVACMode.FAN_ONLY,
-    3: HVACMode.AUTO,
-}
-
-HVAC_MODE_TO_TIS = {
-    HVACMode.OFF: None,  # Handled by state
-    HVACMode.COOL: 0,
-    HVACMode.HEAT: 1,
-    HVACMode.FAN_ONLY: 2,
-    HVACMode.AUTO: 3,
-}
-
-# TIS Fan Speed mapping
-TIS_FAN_MODES = {
-    0: FAN_AUTO,
-    1: FAN_HIGH,
-    2: FAN_MEDIUM,
-    3: FAN_LOW,
-}
-
-FAN_MODE_TO_TIS = {
-    FAN_AUTO: 0,
-    FAN_HIGH: 1,
-    FAN_MEDIUM: 2,
-    FAN_LOW: 3,
-}
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up TIS climate entities from addon devices.json."""
-    entry_data = hass.data[DOMAIN][entry.entry_id]
-    devices = entry_data["devices"]
-    gateway_ip = entry_data["gateway_ip"]
-    udp_port = entry_data["udp_port"]
-    
-    _LOGGER.info(f"Setting up TIS climate entities from {len(devices)} devices")
-    
-    entities = []
-    for unique_id, device_data in devices.items():
-        subnet = device_data.get("subnet")
-        device_id = device_data.get("device_id")
-        model_name = device_data.get("model_name", "TIS Device")
-        device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
-        
-        # Check if device has HVAC/climate support
-        platforms = get_device_platforms(model_name)
-        hvac_channels = get_platform_channel_count(model_name, "hvac")
-        floor_channels = get_platform_channel_count(model_name, "floor_heating")
-        
-        # Create AC entities
-        if hvac_channels > 0:
-            _LOGGER.info(f"Creating {hvac_channels} AC climate entities for {model_name} ({subnet}.{device_id})")
-            
-            for ac_number in range(1, hvac_channels + 1):
-                climate_entity = TISClimate(
-                    hass,
-                    entry,
-                    unique_id,
-                    device_name,
-                    model_name,
-                    subnet,
-                    device_id,
-                    ac_number,
-                    gateway_ip,
-                    udp_port,
-                )
-                entities.append(climate_entity)
-        
-        # Create Floor Heating entities
-        if floor_channels > 0:
-            _LOGGER.info(f"Creating {floor_channels} floor heating entities for {model_name} ({subnet}.{device_id})")
-            
-            for heater_number in range(floor_channels):
-                floor_entity = TISFloorHeating(
-                    hass,
-                    entry,
-                    device_name,
-                    unique_id,
-                    model_name,
-                    subnet,
-                    device_id,
-                    heater_number,
-                    gateway_ip,
-                    udp_port,
-                )
-                entities.append(floor_entity)
-    
-    if entities:
-        async_add_entities(entities)
-        _LOGGER.info(f"Added {len(entities)} TIS climate entities")
-
-
+from.import TISConfigEntry
+from.const import FAN_MODES,TEMPERATURE_RANGES
+handler=TISProtocolHandler()
+POLLING_INTERVAL=timedelta(seconds=60)
+async def async_setup_entry(hass,entry,async_add_devices):
+    H='gateway';G='is_protected';F='device_id';E='channels';B=async_add_devices;A=entry.runtime_data.api;C=await A.get_entities(platform='ac')
+    if C:I=[(C,next(iter(A[E][0].values())),A[F],A[G],A[H])for B in C for(C,A)in B.items()];J=[TISClimate(tis_api=A,ac_name=B,ac_number=C,device_id=D,gateway=E)for(B,C,D,F,E)in I];B(J)
+    D=await A.get_entities(platform='floor_heating')
+    if D:K=[(C,next(iter(A[E][0].values())),A[F],A[G],A[H])for B in D for(C,A)in B.items()];L=[TISFloorHeating(tis_api=A,heater_name=B,heater_number=C,device_id=D,gateway=E)for(B,C,D,F,E)in K];B(L)
 class TISClimate(ClimateEntity):
-    """Representation of a TIS climate device (AC/HVAC)."""
-
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.FAN_MODE
-        | ClimateEntityFeature.TURN_ON
-        | ClimateEntityFeature.TURN_OFF
-    )
-    _attr_hvac_modes = [
-        HVACMode.OFF,
-        HVACMode.COOL,
-        HVACMode.HEAT,
-        HVACMode.FAN_ONLY,
-        HVACMode.AUTO,
-    ]
-    _attr_fan_modes = [FAN_AUTO, FAN_HIGH, FAN_MEDIUM, FAN_LOW]
-    _attr_min_temp = 16
-    _attr_max_temp = 30
-    _attr_target_temperature_step = 1
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        unique_id: str,
-        device_name: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        ac_number: int,
-        gateway_ip: str,
-        udp_port: int,
-    ) -> None:
-        """Initialize the climate device."""
-        self.hass = hass
-        self._entry = entry
-        self._unique_id_prefix = unique_id
-        self._device_name = device_name
-        self._model_name = model_name
-        self._subnet = subnet
-        self._device_id = device_id
-        self._ac_number = ac_number
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        
-        self._attr_name = f"{device_name} AC{ac_number}"
-        self._attr_unique_id = f"{unique_id}_climate_ac{ac_number}"
-        
-        # State
-        self._attr_hvac_mode = HVACMode.OFF
-        self._attr_fan_mode = FAN_AUTO
-        self._attr_target_temperature = 24
-        self._attr_current_temperature = None
-        
-        # Mode-specific temperatures (TISControlProtocol support)
-        self._cool_temp = 24
-        self._heat_temp = 24
-        self._auto_temp = 24
-        
-        self._listener = None
-        self._listener_luna = None
-        
-        # Device info - group all entities under same device
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to event bus for climate feedback."""
+    def __init__(A,tis_api,ac_name,ac_number,device_id,gateway):A.api=tis_api;A._name=ac_name;A.device_id=device_id;A.ac_number=int(ac_number)-1;A._attr_unique_id=f"ac_{A}_{A}";A.gateway=gateway;A._attr_temperature_unit=UnitOfTemperature.CELSIUS;A._unit_index=0 if A._attr_temperature_unit==UnitOfTemperature.CELSIUS else 1;A.update_packet=handler.generate_ac_update_packet(A);A.listener=_A;A._attr_state=STATE_UNKNOWN;A._attr_target_temperature=_A;A._attr_max_temp=_A;A._attr_min_temp=_A;A._attr_target_temperature_step=_A;A.setup_ac()
+    def setup_ac(A):A._attr_state=STATE_UNKNOWN;A._attr_target_temperature=_A;A._attr_hvac_mode=_A;A._attr_fan_mode=FAN_MEDIUM;A._attr_max_temp=15;A._attr_min_temp=26;A._attr_target_temperature_step=1 if A._unit_index==0 else 2;A._attr_hvac_modes=[HVACMode.OFF,HVACMode.HEAT,HVACMode.COOL,HVACMode.AUTO,HVACMode.FAN_ONLY];A._attr_supported_features=ClimateEntityFeature.FAN_MODE|ClimateEntityFeature.TARGET_TEMPERATURE|ClimateEntityFeature.TURN_OFF|ClimateEntityFeature.TURN_ON;A._attr_fan_modes=[FAN_AUTO,FAN_LOW,FAN_MEDIUM,FAN_HIGH];A.mode_target_temperatures={HVACMode.COOL:20,HVACMode.HEAT:30,HVACMode.FAN_ONLY:_A,HVACMode.AUTO:20,HVACMode.OFF:_A};A._update_task_unsub=_A
+    def _start_polling(A):
+        if not A._update_task_unsub:logging.info(f"Starting state polling for {A}");A._update_task_unsub=async_track_time_interval(A.hass,A._async_poll_for_state,POLLING_INTERVAL)
+    def _stop_polling(A):
+        if A._update_task_unsub:logging.info(f"Stopping state polling for {A}");A._update_task_unsub();A._update_task_unsub=_A
+    async def _async_poll_for_state(A,now=_A):logging.info(f"Polling for state of {A}");await A.api.protocol.sender.send_packet(A.update_packet)
+    async def async_added_to_hass(A):
+        A._start_polling()
         @callback
-        def handle_climate_feedback(event):
-            """Handle climate feedback event from __init__.py"""
-            data = event.data
-            
-            # Check if event is for this device and AC unit
-            if (data.get("subnet") == self._subnet and 
-                data.get("device") == self._device_id and
-                data.get("ac_number") == self._ac_number):
-                
-                # Update state
-                state = data.get("state")
-                if state == 0:
-                    self._attr_hvac_mode = HVACMode.OFF
-                else:
-                    # Get mode from feedback
-                    mode = data.get("mode")
-                    self._attr_hvac_mode = TIS_HVAC_MODES.get(mode, HVACMode.AUTO)
-                
-                # Update mode-specific temperatures
-                cool_temp = data.get("cool_temp")
-                heat_temp = data.get("heat_temp")
-                auto_temp = data.get("auto_temp")
-                
-                if cool_temp is not None:
-                    self._cool_temp = cool_temp
-                if heat_temp is not None:
-                    self._heat_temp = heat_temp
-                if auto_temp is not None:
-                    self._auto_temp = auto_temp
-                
-                # Set target_temperature based on current mode
-                if self._attr_hvac_mode == HVACMode.COOL:
-                    self._attr_target_temperature = self._cool_temp
-                elif self._attr_hvac_mode == HVACMode.HEAT:
-                    self._attr_target_temperature = self._heat_temp
-                elif self._attr_hvac_mode == HVACMode.AUTO or self._attr_hvac_mode == HVACMode.HEAT_COOL:
-                    self._attr_target_temperature = self._auto_temp
-                
-                # Update fan mode
-                fan_speed = data.get("fan_speed")
-                if fan_speed is not None:
-                    self._attr_fan_mode = TIS_FAN_MODES.get(fan_speed, FAN_AUTO)
-                
-                self.async_write_ha_state()
-                _LOGGER.info(f"Updated {self._attr_name}: {self._attr_hvac_mode}, Cool={self._cool_temp}°C, Heat={self._heat_temp}°C, Auto={self._auto_temp}°C, Fan={self._attr_fan_mode}")
-        
-        @callback
-        def handle_luna_temp_feedback(event):
-            """Handle Luna temperature (thermostat) feedback event"""
-            data = event.data
-            
-            # Filter by feedback_type
-            if data.get("feedback_type") != "luna_temp_feedback":
-                return
-            
-            # Check if event is for this device
-            device_id = data.get("device_id")
-            if not device_id or device_id[0] != self._subnet or device_id[1] != self._device_id:
-                return
-                
-                temperature = data.get("temperature")
-                if temperature is not None:
-                    self._attr_current_temperature = temperature
-                    self.async_write_ha_state()
-                    _LOGGER.info(f"Updated {self._attr_name} current temp: {temperature}°C")
-        
-        device_id_str = f"[{self._subnet}, {self._device_id}]"
-        self._listener = self.hass.bus.async_listen(device_id_str, handle_climate_feedback)
-        self._listener_luna = self.hass.bus.async_listen(device_id_str, handle_luna_temp_feedback)
-        
-        # Query initial state
-        await self.async_update()
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-        if self._listener_luna:
-            self._listener_luna()
-            self._listener_luna = None
-
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set new HVAC mode."""
-        _LOGGER.info(f"{self._attr_name}: Setting HVAC mode to {hvac_mode}")
-        
-        if hvac_mode == HVACMode.OFF:
-            # Turn off AC
-            await self._send_ac_control(state=0)
-        else:
-            # Turn on with specific mode and its temperature
-            tis_mode = HVAC_MODE_TO_TIS.get(hvac_mode, 3)  # Default to AUTO
-            
-            # Use mode-specific temperature
-            if hvac_mode == HVACMode.COOL:
-                self._attr_target_temperature = self._cool_temp
-            elif hvac_mode == HVACMode.HEAT:
-                self._attr_target_temperature = self._heat_temp
-            elif hvac_mode in (HVACMode.AUTO, HVACMode.HEAT_COOL):
-                self._attr_target_temperature = self._auto_temp
-            
-            await self._send_ac_control(state=1, mode=tis_mode, temperature=self._attr_target_temperature)
-        
-        self._attr_hvac_mode = hvac_mode
-        self.async_write_ha_state()
-
-    async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
-        temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is None:
-            return
-        
-        temperature = int(temperature)
-        _LOGGER.info(f"{self._attr_name}: Setting temperature to {temperature}°C (Mode: {self._attr_hvac_mode})")
-        
-        # Update mode-specific temperature storage
-        if self._attr_hvac_mode == HVACMode.COOL:
-            self._cool_temp = temperature
-        elif self._attr_hvac_mode == HVACMode.HEAT:
-            self._heat_temp = temperature
-        elif self._attr_hvac_mode == HVACMode.AUTO or self._attr_hvac_mode == HVACMode.HEAT_COOL:
-            self._auto_temp = temperature
-        
-        # If currently OFF, turn on with last mode
-        if self._attr_hvac_mode == HVACMode.OFF:
-            self._attr_hvac_mode = HVACMode.AUTO
-        
-        await self._send_ac_control(state=1, temperature=temperature)
-        
-        self._attr_target_temperature = temperature
-        self.async_write_ha_state()
-
-    async def async_set_fan_mode(self, fan_mode: str) -> None:
-        """Set new fan mode."""
-        _LOGGER.info(f"{self._attr_name}: Setting fan mode to {fan_mode}")
-        
-        tis_fan_speed = FAN_MODE_TO_TIS.get(fan_mode, 0)  # Default to AUTO
-        await self._send_ac_control(state=1, fan_speed=tis_fan_speed)
-        
-        self._attr_fan_mode = fan_mode
-        self.async_write_ha_state()
-
-    async def async_turn_on(self) -> None:
-        """Turn on AC."""
-        _LOGGER.info(f"{self._attr_name}: Turning ON")
-        await self.async_set_hvac_mode(HVACMode.AUTO)
-
-    async def async_turn_off(self) -> None:
-        """Turn off AC."""
-        _LOGGER.info(f"{self._attr_name}: Turning OFF")
-        await self.async_set_hvac_mode(HVACMode.OFF)
-
-    async def async_update(self) -> None:
-        """Query AC status using TISControlProtocol (OpCode 0xE0EC)"""
-        try:
-            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
-                return
-            
-            # Create entity mock
-            class EntityMock:
-                def __init__(self, subnet, device, ac_num, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.ac_number = ac_num
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._ac_number,
-                self._gateway_ip,
-                api
-            )
-            
-            # Generate AC query packet
-            packet = protocol_handler.generate_ac_update_packet(entity_mock)
-            
-            # Send with ACK
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"❄️ AC Query: {self._subnet}.{self._device_id} AC{self._ac_number} (ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ AC Query: {self._subnet}.{self._device_id} AC{self._ac_number} (NO ACK)")
-                
-        except Exception as e:
-            _LOGGER.error(f"❌ Error querying AC status: {e}", exc_info=True)
-
-    async def _send_ac_control(
-        self, 
-        state: int = 1, 
-        temperature: int | None = None,
-        mode: int | None = None,
-        fan_speed: int | None = None
-    ) -> None:
-        """Send AC control packet using TISControlProtocol (OpCode 0xE0EE)"""
-        try:
-            entry_data = self.hass.data[DOMAIN][self._entry.entry_id]
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
-                return
-            
-            # Use current values if not provided
-            if temperature is None:
-                temperature = int(self._attr_target_temperature)
-            if mode is None:
-                mode = HVAC_MODE_TO_TIS.get(self._attr_hvac_mode, 3)
-            if fan_speed is None:
-                fan_speed = FAN_MODE_TO_TIS.get(self._attr_fan_mode, 0)
-            
-            # Create entity mock
-            class EntityMock:
-                def __init__(self, subnet, device, ac_num, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.ac_number = ac_num
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._ac_number,
-                self._gateway_ip,
-                api
-            )
-            
-            # Generate AC control packet
-            packet = protocol_handler.generate_ac_control_packet(
-                entity_mock,
-                state=state,
-                temperature=temperature,
-                mode=mode,
-                fan_speed=fan_speed
-            )
-            
-            # Send with ACK
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"✅ AC Control: {self._subnet}.{self._device_id} AC{self._ac_number} "
-                           f"(State={state}, Temp={temperature}°C, Mode={mode}, Fan={fan_speed}, ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ AC Control: {self._subnet}.{self._device_id} AC{self._ac_number} (NO ACK)")
-                
-        except Exception as e:
-            _LOGGER.error(f"❌ Error sending AC control: {e}", exc_info=True)
-
-
+        async def B(event):
+            F='packet_mode_index';B=event
+            if B.event_type==str(A.device_id):
+                E=B.data.get(_F,_A)
+                if E=='ac_feedback':
+                    G=B.data[_G];D=B.data[_H];C=B.data[_I]
+                    if A.ac_number==int(G):
+                        logging.info(f"AC feedback event: {B}")
+                        if D==3:
+                            if C==0:A._attr_state=STATE_OFF;A._attr_hvac_mode=HVACMode.OFF;logging.info('AC turned off')
+                        else:
+                            A._attr_state=STATE_ON
+                            if D==4:A._attr_hvac_mode=HVACMode.COOL;A._attr_target_temperature=C;logging.info(f"Cool mode temperature updated to {C}")
+                            elif D==5:A._attr_fan_mode=next(A for(A,B)in FAN_MODES.items()if B==C);logging.info(f"Fan speed updated to {C}")
+                            elif D==6:A._attr_hvac_mode=next((A for(A,B)in TEMPERATURE_RANGES.items()if B[F]==C),_A);logging.info(f"HVAC mode changed to {C}")
+                            elif D==7:A._attr_hvac_mode=HVACMode.HEAT;A._attr_target_temperature=C;logging.info(f"Heating mode temperature updated to {C}")
+                            elif D==8:A._attr_hvac_mode=HVACMode.AUTO;A._attr_target_temperature=C;logging.info(f"Auto mode temperature updated to {C}")
+                            else:logging.error(f"Unknown sub operation for AC feedback: {D}")
+                elif E=='update_feedback':
+                    if B.data['ac_number']==A.ac_number:
+                        if B.data['state']==0:A._attr_state=STATE_OFF;A._attr_hvac_mode=HVACMode.OFF
+                        else:
+                            A._attr_state=STATE_ON;A._attr_hvac_mode=next((A for(A,C)in TEMPERATURE_RANGES.items()if C[F]==B.data['hvac_mode']),_A);A._attr_fan_mode=next(A for(A,C)in FAN_MODES.items()if C==B.data['fan_speed']);A._attr_min_temp=TEMPERATURE_RANGES[A.hvac_mode][_B][A._unit_index];A._attr_max_temp=TEMPERATURE_RANGES[A.hvac_mode][_C][A._unit_index]
+                            if A._attr_hvac_mode==HVACMode.COOL:A._attr_target_temperature=B.data['cool_temp']
+                            elif A._attr_hvac_mode==HVACMode.HEAT:A._attr_target_temperature=B.data['heat_temp']
+                            elif A._attr_hvac_mode==HVACMode.AUTO:A._attr_target_temperature=B.data['auto_temp']
+                            else:A._attr_target_temperature=_A
+                    A._stop_polling()
+            A.async_write_ha_state();await A.async_update_ha_state(_D)
+        A.listener=A.hass.bus.async_listen(str(A.device_id),B);await A.api.protocol.sender.send_packet(A.update_packet)
+    @property
+    def name(self):return self._name
+    @property
+    def is_on(self):
+        if self._attr_state==STATE_ON:return _D
+        elif self._attr_state==STATE_OFF:return _E
+        else:return
+    @property
+    def temperature_unit(self):return self._attr_temperature_unit
+    @property
+    def target_temperature(self):return self._attr_target_temperature
+    @property
+    def hvac_mode(self):return self._attr_hvac_mode
+    @property
+    def hvac_modes(self):return self._attr_hvac_modes
+    @property
+    def fan_modes(self):return self._attr_fan_modes
+    @property
+    def should_poll(self):return _E
+    async def async_set_hvac_mode(A,hvac_mode):
+        B=hvac_mode
+        if B==HVACMode.OFF:C=STATE_OFF;D=_A;E=_A;F=_A
+        else:C=STATE_ON;E=TEMPERATURE_RANGES[B][_B][A._unit_index];F=TEMPERATURE_RANGES[B][_C][A._unit_index];D=A.mode_target_temperatures[B]
+        G=handler.generate_ac_control_packet(A,TEMPERATURE_RANGES,FAN_MODES,target_state=C,target_temperature=D,target_mode=B);H=await A.api.protocol.sender.send_packet_with_ack(G)
+        if H:A._attr_hvac_mode=B;A._attr_state=C;A._attr_min_temp=E;A._attr_max_temp=F;A._attr_target_temperature=D;A._stop_polling()
+        else:logging.error('Failed to set hvac mode');A._attr_state=STATE_UNKNOWN;A._start_polling();A._attr_hvac_mode=_A
+        A.async_write_ha_state()
+    async def async_set_fan_mode(A,fan_mode):
+        B=fan_mode;C=handler.generate_ac_control_packet(A,TEMPERATURE_RANGES,FAN_MODES,target_fan_mode=B);D=await A.api.protocol.sender.send_packet_with_ack(C)
+        if D:A._attr_fan_mode=B;A._stop_polling()
+        else:logging.error('Failed to set fan mode');A._attr_state=STATE_UNKNOWN;A._start_polling();A._attr_fan_mode=_A
+        A.async_write_ha_state()
+    async def async_set_temperature(A,**C):
+        B=C.get(ATTR_TEMPERATURE);D=handler.generate_ac_control_packet(A,TEMPERATURE_RANGES,FAN_MODES,target_temperature=B);E=await A.api.protocol.sender.send_packet_with_ack(D)
+        if E:A._attr_target_temperature=B;A._stop_polling();A.mode_target_temperatures[A.hvac_mode]=B if B else A.target_temperature
+        else:A._attr_state=STATE_UNKNOWN;logging.error('Failed to set temperature');A._attr_target_temperature=_A;A._attr_hvac_mode=_A;A._start_polling()
+        A.async_write_ha_state()
 class TISFloorHeating(ClimateEntity):
-    """Representation of TIS Floor Heating device."""
-    
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        device_name: str,
-        unique_id: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        heater_number: int,
-        gateway_ip: str,
-        udp_port: int,
-    ) -> None:
-        """Initialize floor heating entity."""
-        self.hass = hass
-        self._entry = entry
-        self._subnet = subnet
-        self._device_id = device_id
-        self._heater_number = heater_number
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        
-        self._attr_name = f"{device_name} Floor Heater {heater_number + 1}"
-        self._attr_unique_id = f"{unique_id}_floor_{heater_number}"
-        
-        # State
-        self._attr_hvac_mode = HVACMode.OFF
-        self._attr_target_temperature = 24
-        self._attr_current_temperature = None
-        
-        self._listener = None
-        
-        # Device info
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-        
-        # Floor heating configuration
-        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_min_temp = 15
-        self._attr_max_temp = 40
-        self._attr_target_temperature_step = 1
-        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-        self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE |
-            ClimateEntityFeature.TURN_OFF |
-            ClimateEntityFeature.TURN_ON
-        )
-    
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to event bus for floor heating feedback."""
+    def __init__(A,tis_api,heater_name,heater_number,device_id,gateway):A.api=tis_api;A._name=heater_name;A.device_id=device_id;A.heater_number=int(heater_number)-1;A._attr_unique_id=f"floor_heater_{A}_{A}";A.gateway=gateway;A._attr_temperature_unit=UnitOfTemperature.CELSIUS;A._unit_index=0 if A._attr_temperature_unit==UnitOfTemperature.CELSIUS else 1;A.update_packet=handler.generate_floor_update_packet(A);A.listener=_A;A._attr_state=STATE_OFF;A._attr_target_temperature=_A;A._attr_max_temp=_A;A._attr_min_temp=_A;A._attr_target_temperature_step=_A;A.setup_heater()
+    def setup_heater(A):A._attr_hvac_mode=_A;A._attr_max_temp=TEMPERATURE_RANGES[HVACMode.HEAT][_C][A._unit_index];A._attr_min_temp=TEMPERATURE_RANGES[HVACMode.HEAT][_B][A._unit_index];A._attr_target_temperature=_A;A._attr_target_temperature_step=1 if A._unit_index==0 else 2;A._attr_hvac_modes=[HVACMode.OFF,HVACMode.HEAT];A._attr_supported_features=ClimateEntityFeature.TARGET_TEMPERATURE|ClimateEntityFeature.TURN_OFF|ClimateEntityFeature.TURN_ON;A.mode_target_temperatures={HVACMode.HEAT:30,HVACMode.OFF:_A};A._update_task_unsub=_A
+    def _start_polling(A):
+        if not A._update_task_unsub:logging.info(f"Starting state polling for {A}");A._update_task_unsub=async_track_time_interval(A.hass,A._async_poll_for_state,POLLING_INTERVAL)
+    def _stop_polling(A):
+        if A._update_task_unsub:logging.info(f"Stopping state polling for {A}");A._update_task_unsub();A._update_task_unsub=_A
+    async def _async_poll_for_state(A,now=_A):logging.info(f"Polling for state of {A}");await A.api.protocol.sender.send_packet(A.update_packet)
+    async def async_added_to_hass(A):
+        A._start_polling()
         @callback
-        def handle_floor_feedback(event):
-            """Handle floor heating feedback event from __init__.py"""
-            data = event.data
-            
-            # Check if event is for this device and heater
-            if (data.get("subnet") == self._subnet and 
-                data.get("device") == self._device_id and
-                data.get("heater_number") == self._heater_number):
-                
-                # Update state
-                state = data.get("state")
-                if state == 0:
-                    self._attr_hvac_mode = HVACMode.OFF
-                else:
-                    self._attr_hvac_mode = HVACMode.HEAT
-                
-                # Update temperature
-                temperature = data.get("temperature")
-                if temperature is not None:
-                    self._attr_target_temperature = temperature
-                
-                self.async_write_ha_state()
-                _LOGGER.info(f"🔥 Updated {self._attr_name}: {self._attr_hvac_mode}, {self._attr_target_temperature}°C")
-        
-        device_id_str = f"[{self._subnet}, {self._device_id}]"
-        self._listener = self.hass.bus.async_listen(device_id_str, handle_floor_feedback)
-        
-        # Query initial state
-        await self.async_update()
-    
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-    
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set new HVAC mode."""
-        _LOGGER.info(f"{self._attr_name}: Setting HVAC mode to {hvac_mode}")
-        
-        state = 0 if hvac_mode == HVACMode.OFF else 1
-        await self._send_floor_control(state=state, temperature=self._attr_target_temperature)
-        
-        self._attr_hvac_mode = hvac_mode
-        self.async_write_ha_state()
-    
-    async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
-        temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is None:
-            return
-        
-        temperature = int(temperature)
-        _LOGGER.info(f"{self._attr_name}: Setting temperature to {temperature}°C")
-        
-        # If currently OFF, turn on
-        if self._attr_hvac_mode == HVACMode.OFF:
-            self._attr_hvac_mode = HVACMode.HEAT
-        
-        await self._send_floor_control(state=1, temperature=temperature)
-        
-        self._attr_target_temperature = temperature
-        self.async_write_ha_state()
-    
-    async def async_turn_on(self) -> None:
-        """Turn on floor heating."""
-        _LOGGER.info(f"{self._attr_name}: Turning ON")
-        await self.async_set_hvac_mode(HVACMode.HEAT)
-    
-    async def async_turn_off(self) -> None:
-        """Turn off floor heating."""
-        _LOGGER.info(f"{self._attr_name}: Turning OFF")
-        await self.async_set_hvac_mode(HVACMode.OFF)
-    
-    async def async_update(self) -> None:
-        """Query floor heating state using TISControlProtocol."""
-        try:
-            entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
-                return
-            
-            # Create entity mock
-            class EntityMock:
-                def __init__(self, subnet, device, heater_num, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.heater_number = heater_num
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._heater_number,
-                self._gateway_ip,
-                api
-            )
-            
-            # Generate floor heating query packet
-            packet = protocol_handler.generate_floor_update_packet(entity_mock)
-            
-            # Send with ACK
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"🔥 Floor Query: {self._subnet}.{self._device_id} Heater{self._heater_number} (ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ Floor Query: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
-                
-        except Exception as e:
-            _LOGGER.error(f"❌ Error querying floor heater: {e}", exc_info=True)
-    
-    async def _send_floor_control(self, state: int, temperature: int) -> None:
-        """Send floor heating control command using TISControlProtocol."""
-        try:
-            entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {})
-            api = entry_data.get("api")
-            protocol = entry_data.get("protocol")
-            protocol_handler = entry_data.get("protocol_handler")
-            
-            if not all([api, protocol, protocol_handler]):
-                _LOGGER.error(f"TISControlProtocol not initialized for {self._attr_name}")
-                return
-            
-            # Create entity mock
-            class EntityMock:
-                def __init__(self, subnet, device, heater_num, gateway, api_instance):
-                    self.device_id = [subnet, device]
-                    self.heater_number = heater_num
-                    self.gateway = gateway
-                    self.api = api_instance
-            
-            entity_mock = EntityMock(
-                self._subnet,
-                self._device_id,
-                self._heater_number,
-                self._gateway_ip,
-                api
-            )
-            
-            # Send power command first
-            packet_power = protocol_handler.generate_floor_on_off_packet(entity_mock, state)
-            ack_received = await protocol.sender.send_packet_with_ack(
-                packet_power,
-                attempts=15,
-                timeout=1.0
-            )
-            
-            if ack_received:
-                _LOGGER.info(f"✅ Floor Power: {self._subnet}.{self._device_id} Heater{self._heater_number} "
-                           f"(State={state}, ACK received)")
-            else:
-                _LOGGER.warning(f"⚠️ Floor Power: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
-            
-            # If turning on, also send temperature
-            if state == 1:
-                await asyncio.sleep(0.1)
-                packet_temp = protocol_handler.generate_floor_set_temp_packet(entity_mock, temperature)
-                ack_received = await protocol.sender.send_packet_with_ack(
-                    packet_temp,
-                    attempts=15,
-                    timeout=1.0
-                )
-                
-                if ack_received:
-                    _LOGGER.info(f"✅ Floor Temp: {self._subnet}.{self._device_id} Heater{self._heater_number} "
-                               f"(Temp={temperature}°C, ACK received)")
-                else:
-                    _LOGGER.warning(f"⚠️ Floor Temp: {self._subnet}.{self._device_id} Heater{self._heater_number} (NO ACK)")
-                    
-        except Exception as e:
-            _LOGGER.error(f"❌ Error sending floor control: {e}", exc_info=True)
+        async def B(event):
+            B=event
+            if B.event_type==str(A.device_id):
+                E=B.data.get(_F,_A)
+                if E=='floor_feedback':
+                    logging.info(f"floor heating feedback event: {B}");F=B.data[_G];D=B.data[_H];C=B.data[_I]
+                    if A.heater_number==int(F):
+                        A._stop_polling()
+                        if D==20:
+                            if C==0:A._attr_state=STATE_OFF;A._attr_hvac_mode=HVACMode.OFF;logging.info('Heater turned off')
+                            else:A._attr_state=STATE_ON;A._attr_hvac_mode=HVACMode.HEAT;A._attr_target_temperature=C;logging.info(f"Heating mode temperature updated to {C}")
+                        elif D==24:A._attr_target_temperature=C
+                        else:logging.error(f"Unknown sub operation for AC feedback: {D}")
+                elif E=='floor_update':
+                    logging.info(f"floor heating update event: {B}")
+                    if B.data['heater_number']==A.heater_number:
+                        A._stop_polling()
+                        if B.data['state']==0:A._attr_state=STATE_OFF;A._attr_hvac_mode=HVACMode.OFF
+                        else:
+                            A._attr_state=STATE_ON;A._attr_hvac_mode=HVACMode.HEAT;A._attr_min_temp=TEMPERATURE_RANGES[A.hvac_mode][_B][A._unit_index];A._attr_max_temp=TEMPERATURE_RANGES[A.hvac_mode][_C][A._unit_index]
+                            if A._attr_hvac_mode==HVACMode.HEAT:A._attr_target_temperature=B.data['temp']
+                            else:A._attr_target_temperature=_A
+            A.async_write_ha_state();await A.async_update_ha_state(_D)
+        A.listener=A.hass.bus.async_listen(str(A.device_id),B);await A.api.protocol.sender.send_packet(A.update_packet)
+    @property
+    def name(self):return self._name
+    @property
+    def is_on(self):
+        if self._attr_state==STATE_ON:return _D
+        elif self._attr_state==STATE_OFF:return _E
+        else:return
+    @property
+    def temperature_unit(self):return self._attr_temperature_unit
+    @property
+    def target_temperature(self):return self._attr_target_temperature
+    @property
+    def hvac_mode(self):return self._attr_hvac_mode
+    @property
+    def hvac_modes(self):return self._attr_hvac_modes
+    @property
+    def should_poll(self):return _E
+    async def async_set_hvac_mode(A,hvac_mode):B=handler.generate_floor_on_off_packet(A,0 if hvac_mode==HVACMode.OFF else 1);await A.api.protocol.sender.send_packet(B)
+    async def async_set_temperature(A,**B):C=B.get(ATTR_TEMPERATURE);D=handler.generate_floor_set_temp_packet(A,int(C));await A.api.protocol.sender.send_packet(D)

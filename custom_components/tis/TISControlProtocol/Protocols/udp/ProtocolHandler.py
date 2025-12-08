@@ -506,34 +506,3 @@ class TISProtocolHandler:
             destination_ip=entity.gateway,
             additional_bytes=[entity.channel_number, entity.universal_type],
         )
-
-    def generate_control_security_packet(self, entity, mode: int) -> TISPacket:
-        """
-        Generate a packet to control security mode (0x0104).
-        
-        :param entity: The entity object containing device information.
-        :param mode: Security mode (1=Vacation, 2=Away, 3=Night, 6=Disarm).
-        :return: A Packet instance.
-        """
-        return TISPacket(
-            device_id=entity.device_id,
-            operation_code=TISProtocolHandler.OPERATION_CONTROL_SECURITY,
-            source_ip=entity.api.host,
-            destination_ip=entity.gateway,
-            additional_bytes=[entity.channel_number, mode],
-        )
-
-    def generate_security_update_packet(self, entity) -> TISPacket:
-        """
-        Generate a packet to query security status (0x011E).
-        
-        :param entity: The entity object containing device information.
-        :return: A Packet instance.
-        """
-        return TISPacket(
-            device_id=entity.device_id,
-            operation_code=TISProtocolHandler.OPERATION_SECURITY_UPDATE,
-            source_ip=entity.api.host,
-            destination_ip=entity.gateway,
-            additional_bytes=[entity.channel_number],
-        )

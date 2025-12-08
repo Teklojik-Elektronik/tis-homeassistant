@@ -79,8 +79,3 @@ class PacketProtocol:
 
         self.connection_made = self.receiver.connection_made
         self.datagram_received = self.receiver.datagram_received
-    
-    def connection_lost(self, exc):
-        """Called when the connection is lost or closed."""
-        if hasattr(self.receiver, 'connection_lost'):
-            self.receiver.connection_lost(exc)

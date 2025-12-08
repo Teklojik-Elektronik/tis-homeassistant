@@ -13,9 +13,8 @@ class PacketDispatcher:
                 tuple(info["operation_code"]), "unknown operation"
             )
             if packet_handler != "unknown operation":
-                logging.info(f"📨 Dispatching to handler: {packet_handler.__name__} for OpCode 0x{info['operation_code'][0]:02X}{info['operation_code'][1]:02X}")
                 await packet_handler(self.hass, info)
             else:
-                logging.warning(f"❌ Unknown operation code: 0x{info['operation_code'][0]:02X}{info['operation_code'][1]:02X}")
+                logging.info(f"unknown operation code: {info['operation_code']}")
         except Exception as e:
-            logging.error(f"💥 Error dispatching packet: {e}, OpCode: {info.get('operation_code', 'unknown')}")
+            logging.info(f"error in dispatching packet: {e} , {info}")

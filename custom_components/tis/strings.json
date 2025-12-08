@@ -2,25 +2,20 @@
   "config": {
     "step": {
       "user": {
-        "title": "TIS Akıllı Ev Yöneticisi",
-        "description": "TIS entegrasyonu başarıyla yapılandırıldı!\n\n🌐 Tüm cihazlarınızı yönetmek için Web Arayüzü'nü kullanın:\n\n**http://homeassistant.local:8888**\n\nYan menüden 'TIS Dashboard' bağlantısını da kullanabilirsiniz."
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]",
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
     "abort": {
-      "already_configured": "TIS sistemi zaten yapılandırılmış.\n\nWeb Arayüzü: http://homeassistant.local:8888\nveya yan menüden 'TIS Dashboard' bağlantısını kullanın."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "TIS Ayarları",
-        "description": "TIS cihazları yönetimi:\n\n📱 Yeni cihaz eklemek için: TIS Addon web arayüzünü kullanın (http://homeassistant.local:8888)\n\n🗑️ Cihaz silmek için:\n1. Cihaz sayfasını açın\n2. Sağ üst köşedeki ⋮ (üç nokta) menüsüne tıklayın\n3. 'Cihazı Sil' butonuna tıklayın\n4. Cihaz ve tüm kanalları silinecektir"
-      }
-    }
-  },
-  "entity": {
-    "switch": {
-      "name": "Kanal {channel}"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   }
 }

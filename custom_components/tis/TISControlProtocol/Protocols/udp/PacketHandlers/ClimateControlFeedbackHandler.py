@@ -16,13 +16,10 @@ async def handle_climate_control_feedback(hass: HomeAssistant, info: dict):
 
     event_data = {
         "device_id": info["device_id"],
-        "subnet": info["device_id"][0],
-        "device": info["device_id"][1],
         "feedback_type": "update_feedback",
         "ac_number": ac_number,
         "state": state,
         "cool_temp": cool_temp,
-        "mode": hvac_mode,  # Rename for consistency
         "hvac_mode": hvac_mode,
         "fan_speed": fan_speed,
         "heat_temp": heat_temp,
@@ -30,9 +27,6 @@ async def handle_climate_control_feedback(hass: HomeAssistant, info: dict):
     }
 
     try:
-        # Fire standard Home Assistant event
-        hass.bus.async_fire("tis_climate_feedback", event_data)
-        # Keep device-specific event for backward compatibility
         hass.bus.async_fire(str(info["device_id"]), event_data)
     except Exception as e:
         logging.error(f"error in firing event for feedback: {e}")

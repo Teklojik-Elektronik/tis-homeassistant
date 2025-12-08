@@ -1,592 +1,190 @@
-"""Support for TIS sensors (temperature, humidity, energy, etc.)."""
 from __future__ import annotations
-
-import logging
-from typing import Any
+_L='mdi:current-ac'
+_K='health_feedback'
+_J='mdi:thermometer'
+_I='temp_sensor'
+_H='monitor'
+_G='bill_energy_sensor'
+_F='monthly_energy_sensor'
+_E='analog_sensor'
+_D='health_sensor'
+_C='energy_sensor'
+_B='feedback_type'
+_A=None
 from datetime import timedelta
-
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    UnitOfTemperature,
-    PERCENTAGE,
-    UnitOfPower,
-    UnitOfEnergy,
-    UnitOfElectricCurrent,
-    UnitOfElectricPotential,
-)
-from homeassistant.core import HomeAssistant, callback
+import logging,json
+from gpiozero import CPUTemperature
+from TISControlProtocol.api import TISApi
+from TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler
+from homeassistant.components.sensor import SensorEntity,UnitOfTemperature
+from homeassistant.core import Event,HomeAssistant,callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
-
-from .const import DOMAIN, HEALTH_SENSOR_TYPES, ENERGY_SENSOR_TYPES
-from .device_appliance_mapping import get_device_platforms, get_platform_channel_count
-
-_LOGGER = logging.getLogger(__name__)
-
-# Air quality state mapping (TISControlProtocol format)
-# States: 0=Not Ready, 1=Excellent, 2=Normal, 3=Low Risk, 4=Med Risk, 5=High Risk
-AIR_QUALITY_STATE_MAP = {
-    0: "Hazır Değil",    # Not Ready
-    1: "Mükemmel",       # Excellent
-    2: "Normal",         # Normal
-    3: "Düşük Risk",     # Low Risk
-    4: "Orta Risk",      # Medium Risk
-    5: "Yüksek Risk",    # High Risk
-}
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up TIS sensors from addon devices.json."""
-    entry_data = hass.data[DOMAIN][entry.entry_id]
-    devices = entry_data["devices"]
-    gateway_ip = entry_data["gateway_ip"]
-    udp_port = entry_data["udp_port"]
-    
-    _LOGGER.info(f"Setting up TIS sensor entities from {len(devices)} devices")
-    
-    entities = []
-    for unique_id, device_data in devices.items():
-        subnet = device_data.get("subnet")
-        device_id = device_data.get("device_id")
-        model_name = device_data.get("model_name", "TIS Device")
-        device_name = device_data.get("name", f"{model_name} ({subnet}.{device_id})")
-        
-        # Get supported platforms from device mapping
-        platforms = get_device_platforms(model_name)
-        health_channels = get_platform_channel_count(model_name, "health_sensor")
-        energy_channels = get_platform_channel_count(model_name, "energy_sensor")
-        temp_channels = get_platform_channel_count(model_name, "temperature_sensor")
-        lux_channels = get_platform_channel_count(model_name, "lux_sensor")
-        analog_channels = get_platform_channel_count(model_name, "analog_sensor")
-        
-        # Check if device has any sensor support
-        has_sensors = health_channels > 0 or energy_channels > 0 or temp_channels > 0 or lux_channels > 0 or analog_channels > 0
-        
-        if has_sensors:
-            _LOGGER.info(f"Device {model_name} ({subnet}.{device_id}) - Sensors: health={health_channels}, energy={energy_channels}, temp={temp_channels}, lux={lux_channels}, analog={analog_channels}")
-            
-            # Health sensor (temperature, humidity, CO2, VOC, etc.)
-            if health_channels > 0:
-                _LOGGER.debug(f"Creating {len(HEALTH_SENSOR_TYPES)} health sensors for {model_name}")
-                for sensor_key, sensor_name in HEALTH_SENSOR_TYPES.items():
-                    sensor_entity = TISHealthSensor(
-                        hass,
-                        entry,
-                        unique_id,
-                        device_name,
-                        model_name,
-                        subnet,
-                        device_id,
-                        gateway_ip,
-                        udp_port,
-                        sensor_key,
-                        sensor_name,
-                    )
-                    entities.append(sensor_entity)
-            
-            # Energy meter
-            if energy_channels > 0:
-                for sensor_key, sensor_name in ENERGY_SENSOR_TYPES.items():
-                    sensor_entity = TISEnergySensor(
-                        hass,
-                        entry,
-                        unique_id,
-                        device_name,
-                        model_name,
-                        subnet,
-                        device_id,
-                        gateway_ip,
-                        udp_port,
-                        sensor_key,
-                        sensor_name,
-                    )
-                    entities.append(sensor_entity)
-            
-            # Temperature sensor
-            if temp_channels > 0:
-                channels = temp_channels
-                for channel in range(1, channels + 1):
-                    sensor_entity = TISTemperatureSensor(
-                        hass,
-                        entry,
-                        unique_id,
-                        device_name,
-                        model_name,
-                        subnet,
-                        device_id,
-                        channel,
-                        gateway_ip,
-                        udp_port,
-                    )
-                    entities.append(sensor_entity)
-    
-    if entities:
-        async_add_entities(entities)
-        _LOGGER.info(f"Added {len(entities)} TIS sensor entities")
-
-
-class TISTemperatureSensor(SensorEntity):
-    """Representation of a TIS temperature sensor."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        unique_id: str,
-        device_name: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        channel: int,
-        gateway_ip: str,
-        udp_port: int,
-    ) -> None:
-        """Initialize the sensor."""
-        self.hass = hass
-        self._entry = entry
-        self._unique_id_prefix = unique_id
-        self._device_name = device_name
-        self._model_name = model_name
-        self._subnet = subnet
-        self._device_id = device_id
-        self._channel = channel
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        
-        self._attr_name = f"{device_name} Temperature CH{channel}"
-        self._attr_unique_id = f"{unique_id}_temp_ch{channel}"
-        self._attr_device_class = SensorDeviceClass.TEMPERATURE
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        self._attr_native_value = None
-        
-        self._listener = None
-        
-        # Device info - group all sensors under same device
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to UDP events when added to hass."""
+from.import TISConfigEntry
+from.coordinator import SensorUpdateCoordinator
+from.entities import BaseSensorEntity
+from.const import ENERGY_SENSOR_TYPES,HEALTH_SENSOR_TYPES,HEALTH_STATES
+from datetime import datetime
+class TISSensorEntity:
+    def __init__(A,device_id,api,gateway,channel_number):A.device_id=device_id;A.api=api;A.gateway=gateway;A.channel_number=channel_number
+async def async_setup_entry(hass,entry,async_add_devices):
+    B=hass;A=entry.runtime_data.api;await A.get_bill_configs();J=[]
+    for(I,D)in RELEVANT_TYPES.items():
+        K=await A.get_entities(platform=I)
+        if K and len(K)>0:
+            N=[(C,next(iter(A['channels'][0].values())),A['device_id'],A['is_protected'],A['gateway'],A['min'],A['max'],A['settings'])for B in K for(C,A)in B.items()];C=[]
+            for(E,F,G,Q,H,min,max,O)in N:
+                if I==_E:C.append(D(hass=B,tis_api=A,gateway=H,name=E,device_id=G,channel_number=F,min=min,max=max,settings=O))
+                elif I==_C:
+                    for(L,M)in ENERGY_SENSOR_TYPES.items():C.append(D(hass=B,tis_api=A,gateway=H,name=f"{M} {E}",device_id=G,channel_number=F,key=L,sensor_type=_C))
+                    C.append(D(hass=B,tis_api=A,gateway=H,name=f"Monthly Energy {E}",device_id=G,channel_number=F,sensor_type=_F));C.append(D(hass=B,tis_api=A,gateway=H,name=f"Bill {E}",device_id=G,channel_number=F,sensor_type=_G))
+                elif I==_D:
+                    for(L,M)in HEALTH_SENSOR_TYPES.items():C.append(D(hass=B,tis_api=A,gateway=H,name=f"{M} {E}",device_id=G,channel_number=F,key=L))
+                    C.append(D(hass=B,tis_api=A,gateway=H,name=f"Health Monitor {E}",device_id=G,channel_number=F,key='None',sensor_type=_H))
+                else:C.append(D(hass=B,tis_api=A,gateway=H,name=E,device_id=G,channel_number=F))
+            J.extend(C)
+    P=CPUTemperatureSensor(B);J.append(P);async_add_devices(J)
+def get_coordinator(hass,tis_api,device_id,gateway,coordinator_type,channel_number):
+    G=channel_number;F=tis_api;D=device_id;A=coordinator_type;E=f"{tuple}_{__var1}", __var1=A)if _C not in A else f"{tuple}_{__var1}_{__var2}", __var1=A, __var2=G)
+    if E not in coordinators:
+        B=TISSensorEntity(D,F,gateway,G)
+        if A==_I:C=protocol_handler.generate_temp_sensor_update_packet(entity=B)
+        elif A==_D:C=protocol_handler.generate_health_sensor_update_packet(entity=B)
+        elif A==_E:C=protocol_handler.generate_update_analog_packet(entity=B)
+        elif A==_C:C=protocol_handler.generate_update_energy_packet(entity=B)
+        elif A==_F:C=protocol_handler.generate_update_monthly_energy_packet(entity=B)
+        elif A==_G:C=protocol_handler.generate_update_monthly_energy_packet(entity=B)
+        coordinators[E]=SensorUpdateCoordinator(hass,F,timedelta(seconds=30),D,C)
+    return coordinators[E]
+protocol_handler=TISProtocolHandler()
+_LOGGER=logging.getLogger(__name__)
+coordinators={}
+class CoordinatedTemperatureSensor(BaseSensorEntity,SensorEntity):
+    def __init__(A,hass,tis_api,gateway,name,device_id,channel_number):C=channel_number;B=device_id;D=get_coordinator(hass,tis_api,B,gateway,_I,C);super().__init__(D,name,B);A._attr_icon=_J;A.name=name;A.device_id=B;A.channel_number=C;A._attr_unique_id=f"sensor_{A}"
+    async def async_added_to_hass(A):
+        await super().async_added_to_hass()
         @callback
-        async def handle_udp_event(event):
-            """Handle UDP packet events."""
-            packet_data = event.data
-            
-            # Check if packet is for this device
-            if (packet_data.get("tgt_subnet") == self._subnet and 
-                packet_data.get("tgt_device") == self._device_id):
-                
-                # Temperature feedback
-                if packet_data.get("feedback_type") == "temp_feedback":
-                    if packet_data.get("channel") == self._channel:
-                        self._attr_native_value = packet_data.get("temperature")
-                        self.async_write_ha_state()
-        
-        self._listener = self.hass.bus.async_listen("tis_udp_packet", handle_udp_event)
-        
-        # Start periodic query (every 30 seconds)
-        async def periodic_update(now):
-            """Periodic query for temperature sensor data."""
-            await self.async_update()
-        
-        # Query immediately on startup
-        await self.async_update()
-        
-        # Schedule periodic updates every 30 seconds
-        self._update_unsub = async_track_time_interval(
-            self.hass,
-            periodic_update,
-            timedelta(seconds=30)
-        )
-        
-        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
-    
-    async def async_update(self) -> None:
-        """Query temperature sensor data using OpCode 0xE3E7"""
-        from .tis_protocol import TISPacket, TISUDPClient
-        import socket
-        
-        try:
-            # Get local IP for SMARTCLOUD header
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        def B(event):
+            B=event
             try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
-            
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            
-            # Create temperature query packet
-            packet_obj = TISPacket.create_temp_query_packet(self._subnet, self._device_id)
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            
-            # Send via UDP
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
-            
-            _LOGGER.info(f"🌡️ Sent temperature query to {self._subnet}.{self._device_id} CH{self._channel} (OpCode 0xE3E7)")
-        except Exception as e:
-            _LOGGER.error(f"Error querying temperature sensor: {e}", exc_info=True)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-        
-        # Cancel periodic updates
-        if hasattr(self, '_update_unsub') and self._update_unsub:
-            self._update_unsub()
-            self._update_unsub = None
-
-
-class TISHealthSensor(SensorEntity):
-    """Representation of a TIS health sensor (temp, humidity, CO2, VOC, noise, lux)."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        unique_id: str,
-        device_name: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        gateway_ip: str,
-        udp_port: int,
-        sensor_key: str,
-        sensor_name: str,
-    ) -> None:
-        """Initialize the sensor."""
-        self.hass = hass
-        self._entry = entry
-        self._unique_id_prefix = unique_id
-        self._device_name = device_name
-        self._model_name = model_name
-        self._subnet = subnet
-        self._device_id = device_id
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        self._sensor_key = sensor_key
-        
-        self._attr_name = f"{device_name} {sensor_name}"
-        self._attr_unique_id = f"{unique_id}_health_{sensor_key}"
-        self._attr_native_value = None
-        
-        # Set state_class for measurement sensors only (not for state indicators)
-        if sensor_key not in ["eco2_state", "tvoc_state", "co_state"]:
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-        
-        # Set device class and unit based on sensor type (TISControlProtocol format)
-        if sensor_key == "temp":
-            self._attr_device_class = SensorDeviceClass.TEMPERATURE
-            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        elif sensor_key == "humidity":
-            self._attr_device_class = SensorDeviceClass.HUMIDITY
-            self._attr_native_unit_of_measurement = PERCENTAGE
-        elif sensor_key == "eco2":
-            self._attr_device_class = SensorDeviceClass.CO2
-            self._attr_native_unit_of_measurement = "ppm"
-            self._attr_icon = "mdi:molecule-co2"
-        elif sensor_key == "tvoc":
-            self._attr_device_class = SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS
-            self._attr_native_unit_of_measurement = "μg/m³"
-            self._attr_icon = "mdi:air-filter"
-        elif sensor_key == "co":
-            self._attr_device_class = SensorDeviceClass.CO
-            self._attr_native_unit_of_measurement = "ppm"
-            self._attr_icon = "mdi:molecule-co"
-        elif sensor_key == "eco2_state":
-            self._attr_native_unit_of_measurement = None
-            self._attr_icon = "mdi:molecule-co2"
-        elif sensor_key == "tvoc_state":
-            self._attr_native_unit_of_measurement = None
-            self._attr_icon = "mdi:air-filter"
-        elif sensor_key == "co_state":
-            self._attr_native_unit_of_measurement = None
-            self._attr_icon = "mdi:molecule-co"
-        elif sensor_key == "lux":
-            self._attr_device_class = SensorDeviceClass.ILLUMINANCE
-            self._attr_native_unit_of_measurement = "lx"
-        elif sensor_key == "noise":
-            self._attr_native_unit_of_measurement = "dB"
-            self._attr_icon = "mdi:volume-high"
-        
-        self._listener = None
-        
-        # Device info - group all sensors under same device
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to event bus for health sensor feedback."""
+                if B.data[_B]=='temp_feedback':A._state=B.data['temp']
+                A.async_write_ha_state()
+            except Exception as C:logging.error(f"event data error for temperature: {B}")
+        A.hass.bus.async_listen(str(A.device_id),B)
+    def _update_state(A,data):0
+    @property
+    def unit_of_measurement(self):return UnitOfTemperature.CELSIUS
+class CoordinatedLUXSensor(BaseSensorEntity,SensorEntity):
+    def __init__(A,hass,tis_api,gateway,name,device_id,channel_number):C=channel_number;B=device_id;D=get_coordinator(hass,tis_api,B,gateway,_D,C);super().__init__(D,name,B);A._attr_icon='mdi:brightness-6';A.name=name;A.device_id=B;A.channel_number=C;A._attr_unique_id=f"sensor_{A}"
+    async def async_added_to_hass(A):
+        await super().async_added_to_hass()
         @callback
-        def handle_health_feedback(event):
-            """Handle health sensor feedback event from __init__.py"""
-            data = event.data
-            
-            # Filter by feedback_type
-            if data.get("feedback_type") != "health_feedback":
-                return
-            
-            # Check if event is for this device
-            device_id = data.get("device_id")
-            if device_id and device_id[0] == self._subnet and device_id[1] == self._device_id:
-                # Map sensor_key to event data keys
-                # Supports both raw values (ppm/ppb) and state indicators (0-5)
-                # Map sensor_key to raw values
-                value_map = {
-                    "temp": data.get("temperature"),
-                    "humidity": data.get("humidity"),
-                    "lux": data.get("lux"),
-                    "noise": data.get("noise"),
-                    "eco2": data.get("eco2"),              # Raw eCO2 (ppm)
-                    "tvoc": data.get("tvoc"),              # Raw TVOC (ppb)
-                    "co": data.get("co"),                  # Raw CO (ppm)
-                }
-                
-                # For state sensors, convert numeric value to text
-                state_map = {
-                    "eco2_state": data.get("eco2_state"),
-                    "tvoc_state": data.get("tvoc_state"),
-                    "co_state": data.get("co_state"),
-                }
-                
-                if self._sensor_key in value_map:
-                    new_value = value_map[self._sensor_key]
-                    if new_value is not None:
-                        self._attr_native_value = new_value
-                        self.async_write_ha_state()
-                        _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
-                
-                elif self._sensor_key in state_map:
-                    state_value = state_map[self._sensor_key]
-                    if state_value is not None:
-                        # Convert state number to text (0=Hazır Değil, 1=Mükemmel, etc.)
-                        self._attr_native_value = AIR_QUALITY_STATE_MAP.get(state_value, f"Bilinmeyen ({state_value})")
-                        self.async_write_ha_state()
-                        _LOGGER.debug(f"Updated {self._attr_name} = {self._attr_native_value} (state={state_value})")
-        
-        device_id_str = f"[{self._subnet}, {self._device_id}]"
-        self._listener = self.hass.bus.async_listen(device_id_str, handle_health_feedback)
-    
-    async def async_update(self) -> None:
-        """Query health sensor data - TODO: Migrate to TISControlProtocol"""
-        # Temporarily disabled - needs TISControlProtocol migration
-        # from .tis_protocol import TISPacket, TISUDPClient
-        _LOGGER.debug(f"Health sensor update skipped (migration pending): {self._attr_name}")
-        return
-        import socket
-        
-        try:
-            # Get local IP for SMARTCLOUD header
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        def B(event):
+            B=event
             try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
-            
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            
-            # Create health query packet
-            packet_obj = TISPacket.create_health_query_packet(self._subnet, self._device_id)
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            
-            # Send via UDP
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
-            
-            _LOGGER.info(f"📡 Sent health query to {self._subnet}.{self._device_id} (OpCode 0x2024)")
-        except Exception as e:
-            _LOGGER.error(f"Error querying health sensor: {e}", exc_info=True)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-        
-        # Cancel periodic updates
-        if hasattr(self, '_update_unsub') and self._update_unsub:
-            self._update_unsub()
-            self._update_unsub = None
-
-
-class TISEnergySensor(SensorEntity):
-    """Representation of a TIS energy meter sensor."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        unique_id: str,
-        device_name: str,
-        model_name: str,
-        subnet: int,
-        device_id: int,
-        gateway_ip: str,
-        udp_port: int,
-        sensor_key: str,
-        sensor_name: str,
-    ) -> None:
-        """Initialize the sensor."""
-        self.hass = hass
-        self._entry = entry
-        self._unique_id_prefix = unique_id
-        self._device_name = device_name
-        self._model_name = model_name
-        self._subnet = subnet
-        self._device_id = device_id
-        self._gateway_ip = gateway_ip
-        self._udp_port = udp_port
-        self._sensor_key = sensor_key
-        
-        self._attr_name = f"{device_name} {sensor_name}"
-        self._attr_unique_id = f"{unique_id}_energy_{sensor_key}"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_value = None
-        
-        # Set device class and unit based on sensor type
-        if "voltage" in sensor_key.lower() or sensor_key.startswith("v"):
-            self._attr_device_class = SensorDeviceClass.VOLTAGE
-            self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-        elif "current" in sensor_key.lower():
-            self._attr_device_class = SensorDeviceClass.CURRENT
-            self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-        elif "power" in sensor_key.lower() or "active" in sensor_key.lower():
-            self._attr_device_class = SensorDeviceClass.POWER
-            self._attr_native_unit_of_measurement = UnitOfPower.WATT
-        elif "energy" in sensor_key.lower():
-            self._attr_device_class = SensorDeviceClass.ENERGY
-            self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-        elif "pf" in sensor_key.lower():
-            self._attr_device_class = SensorDeviceClass.POWER_FACTOR
-            self._attr_native_unit_of_measurement = PERCENTAGE
-        elif "frq" in sensor_key.lower():
-            self._attr_device_class = SensorDeviceClass.FREQUENCY
-            self._attr_native_unit_of_measurement = "Hz"
-        
-        self._listener = None
-        
-        # Device info - group all sensors under same device
-        self._attr_device_info = {
-            "identifiers": {("tis", unique_id)},
-            "name": device_name,
-            "manufacturer": "TIS",
-            "model": model_name,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to event bus for energy meter feedback."""
+                if B.data[_B]==_K:A._state=int(B.data['lux'])
+                A.async_write_ha_state()
+            except Exception as C:logging.error(f"event data error for lux: {B}")
+        A.hass.bus.async_listen(str(A.device_id),B)
+    def _update_state(A,data):0
+class CoordinatedHealthSensor(BaseSensorEntity,SensorEntity):
+    def __init__(A,hass,tis_api,gateway,name,device_id,channel_number,key=_A,sensor_type='sensor'):C=channel_number;B=device_id;D=get_coordinator(hass,tis_api,B,gateway,_D,C);super().__init__(D,name,B);A._attr_icon='mdi:heart-pulse';A.name=name;A.device_id=B;A.channel_number=C;A._attr_unique_id=f"sensor_{A}";A._key=key;A._sensor_type=sensor_type;A.states=HEALTH_STATES
+    def calculate_health_percentage(O,health):
+        B=health;A=B['temp']
+        if A is _A:C=0
+        elif 20<=A<=26:C=100
+        elif 16<=A<=19 or 27<=A<=29:C=75
+        elif 11<=A<=15 or 30<=A<=34:C=50
+        elif 6<=A<=10 or 35<=A<=39:C=25
+        else:C=0
+        F=B['humidity']
+        if F is _A:G=0
+        elif 30<=F<=50:G=100
+        elif 10<=F<=29 or 51<=F<=80:G=50
+        else:G=0
+        E=B['noise']
+        if E is _A:D=0
+        elif 0<=E<=20:D=100
+        elif 21<=E<=100:D=75
+        elif 101<=E<=300:D=50
+        elif 301<=E<=500:D=25
+        else:D=0
+        def H(value):
+            A=value
+            if A==1:return 100
+            elif A==2:return 75
+            elif A==3:return 50
+            elif A==4:return 25
+            else:return 0
+        I=B['co_state'];J=B['eco2_state'];K=B['tvoc_state'];L=H(J);M=H(K);N=(C+G+D+L+M)/5
+        if I in(1,2):return N
+        else:return .0
+    async def async_added_to_hass(A):
+        await super().async_added_to_hass()
         @callback
-        def handle_energy_feedback(event):
-            """Handle energy feedback event from __init__.py"""
-            data = event.data
-            
-            # Check if event is for this device
-            if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
-                # Update sensor value based on sensor_key
-                value_map = {
-                    "v": data.get("voltage"),
-                    "voltage": data.get("voltage"),
-                    "i": data.get("current"),
-                    "current": data.get("current"),
-                    "active_power": data.get("power"),
-                    "power": data.get("power"),
-                    "kwh": data.get("energy"),
-                    "energy": data.get("energy")
-                }
-                
-                if self._sensor_key in value_map:
-                    new_value = value_map[self._sensor_key]
-                    if new_value is not None:
-                        self._attr_native_value = new_value
-                        self.async_write_ha_state()
-                        _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
-        
-        self._listener = self.hass.bus.async_listen("tis_energy_feedback", handle_energy_feedback)
-        
-        # Start periodic query (every 30 seconds like original integration)
-        async def periodic_update(now):
-            """Periodic query for energy meter data."""
-            await self.async_update()
-        
-        # Query immediately on startup
-        await self.async_update()
-        
-        # Schedule periodic updates every 30 seconds
-        self._update_unsub = async_track_time_interval(
-            self.hass,
-            periodic_update,
-            timedelta(seconds=30)
-        )
-        
-        _LOGGER.info(f"Started periodic updates for {self._attr_name} (every 30s)")
-    
-    async def async_update(self) -> None:
-        """Query energy meter data using OpCode 0x2010"""
-        from .tis_protocol import TISPacket, TISUDPClient
-        import socket
-        
-        try:
-            # Get local IP for SMARTCLOUD header
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        def B(event):
+            B=event
             try:
-                s.connect(('8.8.8.8', 80))
-                local_ip = s.getsockname()[0]
-            finally:
-                s.close()
-            
-            ip_bytes = bytes([int(x) for x in local_ip.split('.')])
-            
-            # Create energy query packet (channel 1, current values)
-            packet_obj = TISPacket.create_energy_query_packet(self._subnet, self._device_id, channel=1, query_type='current')
-            tis_data = packet_obj.build()
-            full_packet = ip_bytes + b'SMARTCLOUD' + tis_data
-            
-            # Send via UDP
-            client = TISUDPClient(self._gateway_ip, self._udp_port)
-            await client.async_connect()
-            client.send_to(full_packet, self._gateway_ip)
-            client.close()
-            
-            _LOGGER.info(f"⚡ Sent energy query to {self._subnet}.{self._device_id} (OpCode 0x2010)")
-        except Exception as e:
-            _LOGGER.error(f"Error querying energy meter: {e}", exc_info=True)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe when removed."""
-        if self._listener:
-            self._listener()
-            self._listener = None
-        
-        # Cancel periodic updates
-        if hasattr(self, '_update_unsub') and self._update_unsub:
-            self._update_unsub()
-            self._update_unsub = None
+                if B.data[_B]==_K:
+                    logging.info(f"Health feedback received: {B}")
+                    if A._sensor_type==_H:A._state=A.calculate_health_percentage(B.data)
+                    else:
+                        A._state=int(B.data.get(A._key,_A))
+                        if A._key.find('state')!=-1:A._state=A.states.get(str(A._state),_A)
+                A.async_write_ha_state()
+            except Exception as C:logging.error(f"event data error for health: {B}")
+        A.hass.bus.async_listen(str(A.device_id),B)
+    def _update_state(A,data):0
+class CoordinatedAnalogSensor(BaseSensorEntity,SensorEntity):
+    def __init__(A,hass,tis_api,gateway,name,device_id,channel_number,min=0,max=100,settings=_A):
+        D=channel_number;C=device_id;B=settings;E=get_coordinator(hass,tis_api,C,gateway,_E,D);super().__init__(E,name,C);A._attr_icon=_L;A.name=name;A.device_id=C;A.channel_number=D;A.min=min;A.max=max;A._attr_unique_id=f"sensor_{A}"
+        if B:B=json.loads(B);A.min_capacity=int(B.get('min_capacity',0));A.max_capacity=int(B.get('max_capacity',100))
+        else:raise ValueError('min and max capacity values are required for analog sensors')
+    async def async_added_to_hass(A):
+        await super().async_added_to_hass()
+        @callback
+        def B(event):
+            B=event
+            try:
+                if B.data[_B]=='analog_feedback':D=float(B.data['analog'][A.channel_number-1]);C=(D-A.min)/(A.max-A.min);C=max(0,min(1,C));A._state=A.min_capacity+(A.max_capacity-A.min_capacity)*C
+                A.async_write_ha_state()
+            except Exception as E:logging.error(f"event data error for analog sensor: {B} \n error: {E}")
+        A.hass.bus.async_listen(str(A.device_id),B)
+    def _update_state(A,data):0
+class CPUTemperatureSensor(SensorEntity):
+    def __init__(A,hass):A._cpu=CPUTemperature();A._state=A._cpu.temperature;A._hass=hass;A._attr_name='CPU Temperature Sensor';A._attr_icon=_J;A._attr_update_interval=timedelta(seconds=10);A._attr_unique_id=f"sensor_{A}";async_track_time_interval(A._hass,A.async_update,A._attr_update_interval)
+    async def async_update(A,event_time):A._state=A._cpu.temperature;A.hass.bus.async_fire('cpu_temperature',{'temperature':int(A._state)});A.async_write_ha_state()
+    @property
+    def should_poll(self):return False
+    @property
+    def state(self):return self._state
+    @property
+    def unit_of_measurement(self):return UnitOfTemperature.CELSIUS
+    @property
+    def name(self):return self._attr_name
+class CoordinatedEnergySensor(BaseSensorEntity,SensorEntity):
+    def __init__(A,hass,tis_api,gateway,name,device_id,channel_number,key=_A,sensor_type=_A):E=sensor_type;D=channel_number;C=tis_api;B=device_id;F=get_coordinator(hass,C,B,gateway,E,D);super().__init__(F,name,B);A._attr_icon=_L;A.api=C;A.name=name;A.device_id=B;A.channel_number=D;A._attr_unique_id=f"energy_{A}";A._key=key;A.sensor_type=E;A._attr_state_class='measurement'
+    async def async_added_to_hass(A):
+        await super().async_added_to_hass()
+        @callback
+        def B(event):
+            I='price_per_kw';H='monthly_energy_feedback';F='energy';E='channel_num';B=event
+            try:
+                if B.data[_B]=='energy_feedback'and A.sensor_type==_C:
+                    if B.data[E]==A.channel_number:A._state=float(B.data[F].get(A._key,_A))
+                elif B.data[_B]==H and A.sensor_type==_F:
+                    if B.data[E]==A.channel_number:A._state=B.data[F]
+                elif B.data[_B]==H and A.sensor_type==_G:
+                    if B.data[E]==A.channel_number:
+                        J=datetime.now().month;K=J in[6,7,8,9];C=A.api.bill_configs.get('summer_rates',{})if K else A.api.bill_configs.get('winter_rates',{});G=B.data[F];D=_A
+                        for(L,M)in enumerate(C):
+                            if G<M['min_kw']:D=C[L-1][I];break
+                        if D is _A and len(C)>0:D=C[-1][I]
+                        A._state=int(D*G)
+                A.async_write_ha_state()
+            except Exception as N:logging.error(f"error in self.name: {A}, self._key: {A}, self.sensor_type: {A}");logging.error(f"event data error for energy sensor: {B} \n error: {N}")
+        A.hass.bus.async_listen(str(A.device_id),B)
+    def _update_state(A,data):0
+    @property
+    def native_value(self):return self.state
+RELEVANT_TYPES={'lux_sensor':CoordinatedLUXSensor,'temperature_sensor':CoordinatedTemperatureSensor,_E:CoordinatedAnalogSensor,_C:CoordinatedEnergySensor,_D:CoordinatedHealthSensor}

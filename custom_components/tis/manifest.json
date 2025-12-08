@@ -1,11 +1,24 @@
 {
-  "domain": "tis",
-  "name": "TIS Control",
-  "codeowners": [],
+  "domain": "tis_control",
+  "name": "TIS",
   "config_flow": true,
-  "documentation": "https://github.com/Teklojik-Elektronik/tis-homeassistant",
-  "integration_type": "hub",
+  "dependencies": [],
+  "documentation": "https://www.home-assistant.io/integrations/tis_control",
+  "homekit": {},
   "iot_class": "local_polling",
-  "requirements": [],
-  "version": "1.3.0"
+  "requirements": [
+    "TISControlProtocol==1.0.5",
+    "aiofiles==24.1.0",
+    "RPi.GPIO==0.7.1",
+    "spidev==3.6",
+    "st7789==0.0.4",
+    "gpiozero==1.6.2",
+    "python-dotenv==1.0.1",
+    "cryptography",
+    "psutil==7.0.0",
+    "ruamel.yaml==0.18.10"
+  ],
+  "ssdp": [],
+  "zeroconf": [],
+  "version": "1.0.8"
 }
