@@ -28,6 +28,17 @@ from .device_appliance_mapping import get_device_platforms, get_platform_channel
 
 _LOGGER = logging.getLogger(__name__)
 
+# Air quality state mapping (TISControlProtocol format)
+# States: 0=Not Ready, 1=Excellent, 2=Normal, 3=Low Risk, 4=Med Risk, 5=High Risk
+AIR_QUALITY_STATE_MAP = {
+    0: "Hazır Değil",    # Not Ready
+    1: "Mükemmel",       # Excellent
+    2: "Normal",         # Normal
+    3: "Düşük Risk",     # Low Risk
+    4: "Orta Risk",      # Medium Risk
+    5: "Yüksek Risk",    # High Risk
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -340,6 +351,7 @@ class TISHealthSensor(SensorEntity):
             if data.get("subnet") == self._subnet and data.get("device") == self._device_id:
                 # Map sensor_key to event data keys
                 # Supports both raw values (ppm/ppb) and state indicators (0-5)
+                # Map sensor_key to raw values
                 value_map = {
                     "temp": data.get("temperature"),
                     "humidity": data.get("humidity"),
@@ -348,9 +360,13 @@ class TISHealthSensor(SensorEntity):
                     "eco2": data.get("eco2"),              # Raw eCO2 (ppm)
                     "tvoc": data.get("tvoc"),              # Raw TVOC (ppb)
                     "co": data.get("co"),                  # Raw CO (ppm)
-                    "eco2_state": data.get("eco2_state"),  # State (0-5)
-                    "tvoc_state": data.get("tvoc_state"),  # State (0-5)
-                    "co_state": data.get("co_state"),      # State (0-5)
+                }
+                
+                # For state sensors, convert numeric value to text
+                state_map = {
+                    "eco2_state": data.get("eco2_state"),
+                    "tvoc_state": data.get("tvoc_state"),
+                    "co_state": data.get("co_state"),
                 }
                 
                 if self._sensor_key in value_map:
@@ -359,6 +375,14 @@ class TISHealthSensor(SensorEntity):
                         self._attr_native_value = new_value
                         self.async_write_ha_state()
                         _LOGGER.debug(f"Updated {self._attr_name} = {new_value}")
+                
+                elif self._sensor_key in state_map:
+                    state_value = state_map[self._sensor_key]
+                    if state_value is not None:
+                        # Convert state number to text (0=Hazır Değil, 1=Mükemmel, etc.)
+                        self._attr_native_value = AIR_QUALITY_STATE_MAP.get(state_value, f"Bilinmeyen ({state_value})")
+                        self.async_write_ha_state()
+                        _LOGGER.debug(f"Updated {self._attr_name} = {self._attr_native_value} (state={state_value})")
         
         self._listener = self.hass.bus.async_listen("tis_health_feedback", handle_health_feedback)
         
