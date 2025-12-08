@@ -539,14 +539,13 @@ class TISUDPClient:
         packet.additional_data = bytes([channel])
         return packet
 
-         @ s t a t i c m e t h o d 
-         d e f   c r e a t e _ w e a t h e r _ q u e r y _ p a c k e t ( s u b n e t :   i n t ,   d e v i c e :   i n t )   - >   ' T I S P a c k e t ' : 
-                 " " " H a v a   d u r u m u   s o r g u l a m a   p a k e t i   ( 0 x 2 0 2 0 ) " " " 
-                 p a c k e t   =   T I S P a c k e t ( ) 
-                 p a c k e t . o p _ c o d e   =   T I S P a c k e t . O P E R A T I O N _ G E T _ W E A T H E R 
-                 p a c k e t . t g t _ s u b n e t   =   s u b n e t 
-                 p a c k e t . t g t _ d e v i c e   =   d e v i c e 
-                 p a c k e t . a d d i t i o n a l _ d a t a   =   b ' ' 
-                 r e t u r n   p a c k e t 
- 
- 
+    @staticmethod
+    def create_weather_query_packet(subnet: int, device: int) -> 'TISPacket':
+        """Hava durumu sorgulama paketi (0x2020)"""
+        packet = TISPacket()
+        packet.op_code = TISPacket.OPERATION_GET_WEATHER
+        packet.tgt_subnet = subnet
+        packet.tgt_device = device
+        packet.additional_data = b''
+        return packet
+
