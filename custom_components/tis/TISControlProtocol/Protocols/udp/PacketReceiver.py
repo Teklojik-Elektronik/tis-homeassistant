@@ -27,9 +27,11 @@ class PacketReceiver:
     def datagram_received(self, data, addr):
         try:
             hex = bytes2hex(data, [])  # noqa: F405
+            logging.info(f"📦 RAW UDP PACKET from {addr}: {hex}")
             info = PacketExtractor.extract_info(hex)
+            logging.info(f"📋 Extracted info: OpCode=0x{info.get('op_code', 0):04X}, Device={info.get('device_id', 'unknown')}")
             # dispatch the packet to the appropriate method according to the info
             self._hass.async_create_task(self.dispatcher.dispatch_packet(info))
 
         except Exception as e:
-            logging.error(f"Error in datagram_received: {e}, info: {info}")
+            logging.error(f"Error in datagram_received: {e}, data hex: {bytes2hex(data, [])}")
