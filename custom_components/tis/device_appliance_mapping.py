@@ -300,19 +300,21 @@ TIS_APPLIANCES = [
     "dimmer",  # Light platform
     "rgbw",    # Light platform
     "rgb",     # Light platform
-    "ac",      # Climate platform
+    "ac",      # Climate platform (HVAC/AC control)
+    "hvac",    # Climate platform (Generic HVAC)
     "floor_heating",  # Climate platform
-    "shutter",  # Cover platform
-    "motor",    # Cover platform
+    "shutter",  # Cover platform (Curtain/Blind)
+    "motor",    # Cover platform (Generic motor)
+    "curtain",  # Cover platform (Curtain specific)
     "binary_sensor",
     "security",  # Binary sensor + Alarm panel
     "analog_sensor",  # Sensor platform
     "energy_sensor",  # Sensor platform
     "universal_switch",
-    "health_sensor",  # Sensor platform (multiple sensors)
+    "health_sensor",  # Sensor platform (multiple sensors: temp, humidity, CO2, VOC, PM2.5, lux, noise)
     "lux_sensor",     # Sensor platform
     "temperature_sensor",  # Sensor platform
-    "fan",  # Fan platform
+    "fan",  # Fan platform (speed control)
 ]
 
 
@@ -323,9 +325,11 @@ APPLIANCE_TO_HA_PLATFORM = {
     "rgbw": "light",
     "rgb": "light",
     "ac": "climate",
+    "hvac": "climate",
     "floor_heating": "climate",
     "shutter": "cover",
     "motor": "cover",
+    "curtain": "cover",
     "binary_sensor": "binary_sensor",
     "security": "binary_sensor",  # + alarm_control_panel
     "analog_sensor": "sensor",
