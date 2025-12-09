@@ -1,0 +1,5 @@
+# TIS Control Integration Services
+# This file defines custom services for the TIS Control integration
+
+# Currently no custom services defined
+# Services are automatically provided by entity platforms (switch, light, climate, etc.)

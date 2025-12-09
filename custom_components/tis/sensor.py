@@ -13,7 +13,16 @@ _B='feedback_type'
 _A=None
 from datetime import timedelta
 import logging,json
-from gpiozero import CPUTemperature
+
+# Optional Raspberry Pi CPU temperature support
+try:
+    from gpiozero import CPUTemperature
+    GPIOZERO_AVAILABLE = True
+except ImportError:
+    CPUTemperature = None
+    GPIOZERO_AVAILABLE = False
+    logging.debug("gpiozero not available - CPU temperature sensor disabled (not running on Raspberry Pi)")
+
 from TISControlProtocol.api import TISApi
 from TISControlProtocol.Protocols.udp.ProtocolHandler import TISProtocolHandler
 from homeassistant.components.sensor import SensorEntity,UnitOfTemperature
@@ -43,7 +52,14 @@ async def async_setup_entry(hass,entry,async_add_devices):
                     C.append(D(hass=B,tis_api=A,gateway=H,name=f"Health Monitor {E}",device_id=G,channel_number=F,key='None',sensor_type=_H))
                 else:C.append(D(hass=B,tis_api=A,gateway=H,name=E,device_id=G,channel_number=F))
             J.extend(C)
-    P=CPUTemperatureSensor(B);J.append(P);async_add_devices(J)
+    
+    # Add CPU temperature sensor only on Raspberry Pi
+    if GPIOZERO_AVAILABLE:
+        P=CPUTemperatureSensor(B);J.append(P)
+    else:
+        logging.info("Skipping CPU temperature sensor - gpiozero not available")
+    
+    async_add_devices(J)
 def get_coordinator(hass,tis_api,device_id,gateway,coordinator_type,channel_number):
     G=channel_number;F=tis_api;D=device_id;A=coordinator_type;E=f"{tuple(D)}_{A}"if _C not in A else f"{tuple(D)}_{A}_{G}"
     if E not in coordinators:
@@ -152,7 +168,10 @@ class CoordinatedAnalogSensor(BaseSensorEntity,SensorEntity):
         A.hass.bus.async_listen(str(A.device_id),B)
     def _update_state(A,data):0
 class CPUTemperatureSensor(SensorEntity):
-    def __init__(A,hass):A._cpu=CPUTemperature();A._state=A._cpu.temperature;A._hass=hass;A._attr_name='CPU Temperature Sensor';A._attr_icon=_J;A._attr_update_interval=timedelta(seconds=10);A._attr_unique_id=f"sensor_{A}";async_track_time_interval(A._hass,A.async_update,A._attr_update_interval)
+    def __init__(A,hass):
+        if not GPIOZERO_AVAILABLE or CPUTemperature is None:
+            raise RuntimeError("CPUTemperatureSensor requires gpiozero library")
+        A._cpu=CPUTemperature();A._state=A._cpu.temperature;A._hass=hass;A._attr_name='CPU Temperature Sensor';A._attr_icon=_J;A._attr_update_interval=timedelta(seconds=10);A._attr_unique_id=f"sensor_{A}";async_track_time_interval(A._hass,A.async_update,A._attr_update_interval)
     async def async_update(A,event_time):A._state=A._cpu.temperature;A.hass.bus.async_fire('cpu_temperature',{'temperature':int(A._state)});A.async_write_ha_state()
     @property
     def should_poll(self):return False

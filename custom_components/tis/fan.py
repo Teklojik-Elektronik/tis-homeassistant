@@ -8,9 +8,21 @@ from homeassistant.core import Event,HomeAssistant,callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from TISControlProtocol.api import TISApi
 from.import TISConfigEntry
-import RPi.GPIO as GPIO
+
+# Optional Raspberry Pi GPIO support
+try:
+    import RPi.GPIO as GPIO
+    GPIO_AVAILABLE = True
+except ImportError:
+    GPIO_AVAILABLE = False
+    logging.debug("RPi.GPIO not available - CPU fan control disabled (not running on Raspberry Pi)")
+
 SUPPORT=FanEntityFeature.SET_SPEED|FanEntityFeature.TURN_OFF|FanEntityFeature.TURN_ON
-async def async_setup_entry(hass,entry,async_add_entities):A=entry.runtime_data.api;async_add_entities([TISCPUFan(hass,'CPU_Fan','CPU Fan Speed Controller',SUPPORT,A)])
+async def async_setup_entry(hass,entry,async_add_entities):
+    if not GPIO_AVAILABLE:
+        logging.info("Skipping CPU fan setup - GPIO not available")
+        return
+    A=entry.runtime_data.api;async_add_entities([TISCPUFan(hass,'CPU_Fan','CPU Fan Speed Controller',SUPPORT,A)])
 class TISCPUFan(FanEntity):
     _attr_should_poll=_B;_attr_translation_key='cpu'
     def __init__(A,hass,unique_id,name,supported_features,api,pin=13,lower_threshold=40,higher_threshold=50):
@@ -19,6 +31,10 @@ class TISCPUFan(FanEntity):
         if B&FanEntityFeature.DIRECTION:A._direction='forward'
         A.setup_light()
     def setup_light(A):
+        if not GPIO_AVAILABLE:
+            logging.warning('GPIO not available - fan control disabled')
+            A._pwm=_A;A._attr_available=_B
+            return
         try:GPIO.setmode(GPIO.BCM);GPIO.setup(A._pin,GPIO.OUT);A._pwm=GPIO.PWM(A._pin,100);A._pwm.start(50)
         except RuntimeError:logging.error('GPIO PWM already in use');A._pwm=_A;A._attr_available=_B
     async def async_added_to_hass(A):

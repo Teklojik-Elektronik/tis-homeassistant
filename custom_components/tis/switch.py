@@ -23,7 +23,7 @@ async def async_setup_entry(hass,entry,async_add_devices):
         except Exception as E:logging.error(f"error happened creating entities e: {E}")
 protocol_handler=TISProtocolHandler()
 class TISSwitch(SwitchEntity):
-    def __init__(A,tis_api,switch_name,channel_number,device_id,gateway):B=switch_name;A.api=tis_api;A._name=B;A._attr_unique_id=f"switch_{A}";A._state=STATE_UNKNOWN;A._attr_is_on=_A;A.name=B;A.device_id=device_id;A.gateway=gateway;A.channel_number=int(channel_number);A.listener=_A;A.broadcast_channel=255;A.on_packet=protocol_handler.generate_control_on_packet(A);A.off_packet=protocol_handler.generate_control_off_packet(A);A.update_packet=protocol_handler.generate_control_update_packet(A);A._update_task_unsub=_A
+    def __init__(A,tis_api,switch_name,channel_number,device_id,gateway):B=switch_name;A.api=tis_api;A._name=B;A.device_id=device_id;A.channel_number=int(channel_number);A._attr_unique_id=f"switch_{device_id}_{channel_number}";A._state=STATE_UNKNOWN;A._attr_is_on=_A;A.name=B;A.gateway=gateway;A.listener=_A;A.broadcast_channel=255;A.on_packet=protocol_handler.generate_control_on_packet(A);A.off_packet=protocol_handler.generate_control_off_packet(A);A.update_packet=protocol_handler.generate_control_update_packet(A);A._update_task_unsub=_A
     def _start_polling(A):
         if not A._update_task_unsub:logging.info(f"Starting state polling for {A}");A._update_task_unsub=async_track_time_interval(A.hass,A._async_poll_for_state,POLLING_INTERVAL)
     def _stop_polling(A):

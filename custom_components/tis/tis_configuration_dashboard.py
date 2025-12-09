@@ -5,6 +5,9 @@ import logging
 
 
 def create():
+    """Create TIS configuration dashboard (runs in executor to avoid blocking)."""
+    # Note: This function performs blocking I/O operations.
+    # It should be called via hass.async_add_executor_job() from async context.
     """Create TIS configuration dashboard in Lovelace."""
     current_dir = os.path.dirname(__file__)
     base_dir = os.path.abspath(os.path.join(current_dir, "../../"))

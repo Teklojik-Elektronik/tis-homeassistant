@@ -63,8 +63,8 @@ protocol_handler = TISProtocolHandler()
 
 async def async_setup_entry(hass: HomeAssistant, entry: TISConfigEntry) -> bool:
     """Set up TIS integration."""
-    # Create dashboard
-    tis_configuration_dashboard.create()
+    # Create dashboard (run in executor to avoid blocking)
+    await hass.async_add_executor_job(tis_configuration_dashboard.create)
     
     # Configure HTTP settings in configuration.yaml
     current_dir = os.path.dirname(__file__)
