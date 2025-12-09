@@ -12,9 +12,13 @@ from homeassistant.components.climate import (
     UnitOfTemperature,
 )
 
+# Import comprehensive device mappings
+from .device_mappings import TIS_DEVICE_MAPPINGS
+
 DOMAIN = "tis_control"
 
-DEVICES_DICT = {
+# Legacy small dict - keep for backward compatibility
+DEVICES_DICT_LEGACY = {
     (0x1B, 0xBA): "RCU-8OUT-8IN",
     (0x0B, 0xE9): "SEC-SM",
     (0x80, 0x58): "IP-COM-PORT",
@@ -32,6 +36,14 @@ DEVICES_DICT = {
     (0x01, 0xB8): "TIS-VLC-12CH-10A",
     (0x01, 0xAA): "TIS-VLC-6CH-3A",
 }
+
+# Comprehensive device dictionary (191+ devices)
+# Format: (byte1, byte2): "Device Name"
+DEVICES_DICT = {key: value[0] for key, value in TIS_DEVICE_MAPPINGS.items()}
+
+# Appliance type mappings for automatic entity platform detection
+# Format: (byte1, byte2): "appliance_type"
+APPLIANCE_TYPE_MAP = {key: value[1] for key, value in TIS_DEVICE_MAPPINGS.items()}
 
 TEMPERATURE_RANGES = {
     HVACMode.COOL: {
